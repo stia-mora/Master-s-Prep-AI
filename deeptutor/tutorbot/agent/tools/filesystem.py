@@ -24,7 +24,7 @@ def _resolve_path(
 
 
 class _FsTool(Tool):
-    """Shared base for filesystem tools — common init and path resolution."""
+    """Shared base for filesystem tools 鈥?common init and path resolution."""
 
     def __init__(self, workspace: Path | None = None, allowed_dir: Path | None = None):
         self._workspace = workspace
@@ -114,7 +114,7 @@ class ReadFileTool(_FsTool):
             if end < total:
                 result += f"\n\n(Showing lines {offset}-{end} of {total}. Use offset={end + 1} to continue.)"
             else:
-                result += f"\n\n(End of file — {total} lines total)"
+                result += f"\n\n(End of file 鈥?{total} lines total)"
             return result
         except PermissionError as e:
             return f"Error: {e}"
@@ -178,13 +178,13 @@ def _find_match(content: str, old_text: str) -> tuple[str | None, int]:
     old_lines = old_text.splitlines()
     if not old_lines:
         return None, 0
-    stripped_old = [l.strip() for l in old_lines]
+    stripped_old = [line.strip() for line in old_lines]
     content_lines = content.splitlines()
 
     candidates = []
     for i in range(len(content_lines) - len(stripped_old) + 1):
         window = content_lines[i : i + len(stripped_old)]
-        if [l.strip() for l in window] == stripped_old:
+        if [line.strip() for line in window] == stripped_old:
             candidates.append("\n".join(window))
 
     if candidates:
@@ -381,7 +381,7 @@ class ListDirTool(_FsTool):
                         continue
                     total += 1
                     if len(items) < cap:
-                        pfx = "📁 " if item.is_dir() else "📄 "
+                        pfx = "馃搧 " if item.is_dir() else "馃搫 "
                         items.append(f"{pfx}{item.name}")
 
             if not items and total == 0:

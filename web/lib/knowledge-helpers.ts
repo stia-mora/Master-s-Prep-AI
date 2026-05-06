@@ -38,6 +38,13 @@ export interface KnowledgeBase {
     last_updated?: string;
     rag_provider?: string;
     needs_reindex?: boolean;
+    display_name?: string;
+    short_name?: string;
+    source_label?: string;
+    source_summary?: string;
+    source_type?: "knowledge" | "question" | string;
+    source_id?: string;
+    debug_name?: string;
     embedding_model?: string;
     embedding_dim?: number;
     embedding_mismatch?: boolean;
@@ -108,6 +115,105 @@ const parseKnowledgeTimestamp = (value?: string): Date | null => {
 export const formatKnowledgeTimestamp = (value?: string): string | null => {
   const parsed = parseKnowledgeTimestamp(value);
   return parsed ? parsed.toLocaleString() : value || null;
+};
+
+type KnowledgeBaseLike = {
+  name: string;
+  metadata?: Record<string, unknown> | KnowledgeBase["metadata"] | null;
+};
+
+const metadataString = (value: unknown): string | null => {
+  if (typeof value !== "string") return null;
+  const trimmed = value.trim();
+  return trimmed ? trimmed : null;
+};
+
+const KAOYAN_SEPARATOR = "\uff5c";
+const QUESTION_LABEL = "\u9898\u76ee\u89e3\u6790";
+const KNOWLEDGE_LABEL = "\u77e5\u8bc6\u70b9\u89e3\u6790";
+const QUESTION_PREFIX = "\u9898\u76ee";
+const KNOWLEDGE_PREFIX = "\u77e5\u8bc6\u70b9";
+
+const GENERIC_KAOYAN_TEXT = new Set([
+  "\u8003\u7814\u6570\u5b66",
+  "\u6570\u5b66",
+  "\u9ad8\u7b49\u6570\u5b66",
+  "\u9ad8\u6570",
+  "\u8003\u7814\u6570\u5b66\u9898",
+  "\u9ad8\u6570\u77e5\u8bc6\u70b9",
+]);
+
+const normalizeDisplayText = (value: string | null): string | null => {
+  if (!value) return null;
+  return value.replace(/\s+/g, "").trim() || null;
+};
+
+const kaoyanScopedKind = (kb: KnowledgeBaseLike): "question" | "knowledge" | null => {
+  const sourceType = metadataString(kb.metadata?.source_type);
+  if (sourceType === "question" || sourceType === "knowledge") return sourceType;
+  if (/^kaoyan_(?:.*_)?question_/.test(kb.name)) return "question";
+  if (/^kaoyan_(?:.*_)?knowledge_/.test(kb.name)) return "knowledge";
+  return null;
+};
+
+const kaoyanHashToken = (name: string): string | null => {
+  const match = name.match(/^kaoyan_(?:.*_)?(?:question|knowledge)_([A-Za-z0-9]+)$/);
+  return match?.[1]?.slice(0, 6) ?? null;
+};
+
+const isGenericKaoyanName = (value: string | null): boolean => {
+  const normalized = normalizeDisplayText(value);
+  if (!normalized) return true;
+  const withoutPrefix = normalized
+    .replace(new RegExp(`^${QUESTION_LABEL}${KAOYAN_SEPARATOR}?`), "")
+    .replace(new RegExp(`^${KNOWLEDGE_LABEL}${KAOYAN_SEPARATOR}?`), "")
+    .replace(new RegExp(`^${QUESTION_PREFIX}${KAOYAN_SEPARATOR}?`), "")
+    .replace(new RegExp(`^${KNOWLEDGE_PREFIX}${KAOYAN_SEPARATOR}?`), "");
+  return GENERIC_KAOYAN_TEXT.has(withoutPrefix) || GENERIC_KAOYAN_TEXT.has(normalized);
+};
+
+const compactSourceId = (sourceId: string | null): string | null => {
+  if (!sourceId) return null;
+  if (sourceId.length <= 18) return sourceId;
+  return `${sourceId.slice(0, 10)}...${sourceId.slice(-4)}`;
+};
+
+const kaoyanFallbackDisplayName = (kb: KnowledgeBaseLike): string | null => {
+  const kind = kaoyanScopedKind(kb);
+  if (!kind) return null;
+
+  const sourceId = compactSourceId(metadataString(kb.metadata?.source_id));
+  const sourceSummary = metadataString(kb.metadata?.source_summary);
+  const shortName = metadataString(kb.metadata?.short_name);
+  const token = kaoyanHashToken(kb.name);
+  const fallbackId = sourceId ?? (token ? `#${token}` : null);
+  const summary = !isGenericKaoyanName(sourceSummary)
+    ? sourceSummary
+    : !isGenericKaoyanName(shortName)
+      ? shortName
+      : null;
+
+  const parts = kind === "question" ? [QUESTION_LABEL] : [KNOWLEDGE_LABEL];
+  if (fallbackId) parts.push(fallbackId);
+  if (summary && summary !== fallbackId) parts.push(summary);
+  return parts.join(KAOYAN_SEPARATOR);
+};
+
+export const getKnowledgeBaseDisplayName = (kb: KnowledgeBaseLike): string => {
+  const displayName = metadataString(kb.metadata?.display_name);
+  if (displayName && !isGenericKaoyanName(displayName)) return displayName;
+  return kaoyanFallbackDisplayName(kb) ?? displayName ?? kb.name;
+};
+
+export const getKnowledgeBaseShortName = (kb: KnowledgeBaseLike): string => {
+  const shortName = metadataString(kb.metadata?.short_name);
+  if (shortName && !isGenericKaoyanName(shortName)) return shortName;
+  return kaoyanFallbackDisplayName(kb) ?? getKnowledgeBaseDisplayName(kb);
+};
+export const getKnowledgeBaseDebugName = (kb: KnowledgeBaseLike): string | null => {
+  const debug = metadataString(kb.metadata?.debug_name) ?? kb.name;
+  const display = getKnowledgeBaseDisplayName(kb);
+  return debug !== display ? debug : null;
 };
 
 export const resolveKbStatus = (kb: KnowledgeBase): string =>

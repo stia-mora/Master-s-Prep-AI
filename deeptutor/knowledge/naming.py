@@ -5,7 +5,6 @@ from __future__ import annotations
 import re
 import unicodedata
 
-
 _CONTROL_CHARS = re.compile(r"[\x00-\x1f\x7f]")
 _FORBIDDEN_CHARS = set('<>:"/\\|?*#%')
 _MAX_KB_NAME_LENGTH = 120

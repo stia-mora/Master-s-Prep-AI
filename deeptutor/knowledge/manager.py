@@ -11,6 +11,7 @@ import hashlib
 import json
 import os
 from pathlib import Path
+import re
 import shutil
 import stat
 import sys
@@ -22,6 +23,121 @@ from deeptutor.services.rag.file_routing import FileTypeRouter
 
 logger = get_logger("KnowledgeBaseManager")
 
+SCOPED_METADATA_FIELDS = (
+    "display_name",
+    "short_name",
+    "source_label",
+    "source_summary",
+    "source_type",
+    "source_id",
+    "debug_name",
+)
+
+
+def _read_kb_metadata_file(kb_dir: Path) -> dict[str, Any]:
+    metadata_file = kb_dir / "metadata.json"
+    if not metadata_file.exists():
+        return {}
+    try:
+        with open(metadata_file, encoding="utf-8") as f:
+            metadata = json.load(f)
+        return metadata if isinstance(metadata, dict) else {}
+    except Exception as exc:
+        logger.warning(f"Failed to read metadata.json for '{kb_dir.name}': {exc}")
+        return {}
+
+
+def _merge_scoped_metadata(target: dict[str, Any], metadata: dict[str, Any]) -> bool:
+    changed = False
+    for key in SCOPED_METADATA_FIELDS:
+        value = metadata.get(key)
+        if value is not None and target.get(key) != value:
+            target[key] = value
+            changed = True
+    return changed
+
+
+def _clean_display_fragment(value: Any, limit: int = 24) -> str:
+    text = str(value or "")
+    text = re.sub(r"#references\s*\"citation\"", " ", text)
+    text = re.sub(r"\$+", " ", text)
+    text = re.sub(r"\\(?:left|right|frac|sqrt|lim|sum|int|to|infty|cdots|operatorname|begin|end|mathrm|text)\b", " ", text)
+    text = re.sub(r"[{}\[\]`*_>#|]", " ", text)
+    text = re.sub(r"(?:^|\s)[\(\uFF08]?[A-D][\)\uFF09][\s\u3001.\uFF0E:\uFF1A]*", " ", text, flags=re.IGNORECASE)
+    text = re.sub(r"(?:^|\s)\d+[.\u3001\)\uFF09]\s*", " ", text)
+    text = re.sub(r"\s+", " ", text).strip(" ,.;:\uFF0C\u3002\uFF1B\uFF1A\u3001")
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
+
+
+_GENERIC_KAOYAN_LABELS = {
+    "\u8003\u7814\u6570\u5b66",
+    "\u6570\u5b66",
+    "\u9ad8\u7b49\u6570\u5b66",
+    "\u9ad8\u6570",
+    "\u8003\u7814\u6570\u5b66\u9898",
+    "\u9ad8\u6570\u77e5\u8bc6\u70b9",
+}
+
+
+def _is_generic_kaoyan_display(value: Any) -> bool:
+    text = str(value or "").strip()
+    if not text:
+        return True
+    normalized = re.sub(r"\s+", "", text)
+    normalized = re.sub(r"^(?:\u9898\u76ee\u89e3\u6790|\u77e5\u8bc6\u70b9\u89e3\u6790|\u9898\u76ee|\u77e5\u8bc6\u70b9)\uff5c?", "", normalized)
+    return normalized in _GENERIC_KAOYAN_LABELS
+
+
+def _infer_kaoyan_scoped_metadata(kb_name: str, kb_dir: Path, metadata: dict[str, Any]) -> dict[str, Any]:
+    if not kb_name.startswith("kaoyan_") or not _is_generic_kaoyan_display(metadata.get("display_name")):
+        return {}
+    source_type = str(metadata.get("source_type") or "")
+    if not source_type:
+        if "question" in kb_name:
+            source_type = "question"
+        elif "knowledge" in kb_name:
+            source_type = "knowledge"
+    if source_type not in {"knowledge", "question"}:
+        return {}
+    raw_text = ""
+    raw_dir = kb_dir / "raw"
+    if raw_dir.exists():
+        for file_path in raw_dir.glob("*.md"):
+            try:
+                raw_text = file_path.read_text(encoding="utf-8")[:20000]
+                break
+            except Exception:
+                continue
+    source_id_match = re.search(r"source_id:\s*([^\n]+)", raw_text, flags=re.IGNORECASE)
+    source_id = metadata.get("source_id") or (source_id_match.group(1).strip() if source_id_match else None)
+    knowledge_match = re.search(r'"knowledge_name"\s*:\s*"([^"]+)"', raw_text)
+    if not knowledge_match:
+        knowledge_match = re.search(r"\*\*knowledge name\*\*:\s*([^\n]+)", raw_text, flags=re.IGNORECASE)
+    knowledge_name = _clean_display_fragment(knowledge_match.group(1) if knowledge_match else "", 24) or "\u9ad8\u6570\u77e5\u8bc6\u70b9"
+    if source_type == "question":
+        stem_match = re.search(r"stem:\s*\n(.+?)(?:\n\n|options:|standard answer:)", raw_text, flags=re.S | re.I)
+        stem = stem_match.group(1) if stem_match else metadata.get("source_id") or kb_name
+        summary = _clean_display_fragment(stem, 24) or "\u8003\u7814\u6570\u5b66\u9898"
+        return {
+            "display_name": f"\u9898\u76ee\uff5c{knowledge_name}\uff5c{summary}",
+            "short_name": summary,
+            "source_label": "\u9898\u76ee\u89e3\u6790",
+            "source_summary": summary,
+            "source_type": source_type,
+            "source_id": source_id,
+            "debug_name": kb_name,
+        }
+    return {
+        "display_name": f"\u77e5\u8bc6\u70b9\uff5c{knowledge_name}",
+        "short_name": knowledge_name,
+        "source_label": "\u77e5\u8bc6\u70b9\u89e3\u6790",
+        "source_summary": knowledge_name,
+        "source_type": source_type,
+        "source_id": metadata.get("source_id"),
+        "debug_name": kb_name,
+    }
 
 # Cross-platform file locking
 @contextmanager
@@ -224,6 +340,12 @@ class KnowledgeBaseManager:
                             config_changed = True
 
                     kb_dir = self.base_dir / kb_name
+                    file_metadata = _read_kb_metadata_file(kb_dir)
+                    inferred_metadata = _infer_kaoyan_scoped_metadata(kb_name, kb_dir, {**file_metadata, **kb_entry})
+                    if _merge_scoped_metadata(kb_entry, file_metadata):
+                        config_changed = True
+                    if _merge_scoped_metadata(kb_entry, inferred_metadata):
+                        config_changed = True
                     legacy_storage = kb_dir / "rag_storage"
                     has_llamaindex_index = any(
                         bool(version.get("ready")) for version in list_kb_versions(kb_dir)
@@ -413,25 +535,20 @@ class KnowledgeBaseManager:
         }
 
         # Try to read metadata.json for existing info (backward compatibility)
-        metadata_file = kb_dir / "metadata.json"
-        if metadata_file.exists():
-            try:
-                with open(metadata_file, encoding="utf-8") as f:
-                    metadata = json.load(f)
-                # Migrate relevant fields
-                if metadata.get("description"):
-                    kb_entry["description"] = metadata["description"]
-                if metadata.get("rag_provider"):
-                    raw_provider = str(metadata["rag_provider"]).strip().lower()
-                    kb_entry["rag_provider"] = DEFAULT_PROVIDER
-                    if raw_provider not in {"", DEFAULT_PROVIDER}:
-                        kb_entry["needs_reindex"] = True
-                if metadata.get("created_at"):
-                    kb_entry["created_at"] = metadata["created_at"]
-                if metadata.get("last_updated"):
-                    kb_entry["updated_at"] = metadata["last_updated"]
-            except Exception as e:
-                logger.warning(f"Failed to read metadata.json for '{name}': {e}")
+        metadata = _read_kb_metadata_file(kb_dir)
+        if metadata:
+            if metadata.get("description"):
+                kb_entry["description"] = metadata["description"]
+            if metadata.get("rag_provider"):
+                raw_provider = str(metadata["rag_provider"]).strip().lower()
+                kb_entry["rag_provider"] = DEFAULT_PROVIDER
+                if raw_provider not in {"", DEFAULT_PROVIDER}:
+                    kb_entry["needs_reindex"] = True
+            if metadata.get("created_at"):
+                kb_entry["created_at"] = metadata["created_at"]
+            if metadata.get("last_updated"):
+                kb_entry["updated_at"] = metadata["last_updated"]
+            _merge_scoped_metadata(kb_entry, metadata)
 
         # Detect rag_provider from storage type if not set
         if "rag_provider" not in kb_entry:
@@ -590,6 +707,12 @@ class KnowledgeBaseManager:
                 "created_at": kb_config.get("created_at"),
                 "last_updated": kb_config.get("updated_at"),
             }
+            _merge_scoped_metadata(metadata, kb_config)
+            if kb_name:
+                file_metadata = _read_kb_metadata_file(self.base_dir / kb_name)
+                inferred_metadata = _infer_kaoyan_scoped_metadata(kb_name, self.base_dir / kb_name, {**file_metadata, **metadata})
+                _merge_scoped_metadata(metadata, file_metadata)
+                _merge_scoped_metadata(metadata, inferred_metadata)
             metadata.update(self._embedding_fields(kb_config))
             # Remove None values
             metadata = {k: v for k, v in metadata.items() if v is not None}
@@ -671,6 +794,11 @@ class KnowledgeBaseManager:
         if updated_at:
             metadata["last_updated"] = updated_at
 
+        _merge_scoped_metadata(metadata, kb_config)
+        file_metadata = _read_kb_metadata_file(kb_dir)
+        inferred_metadata = _infer_kaoyan_scoped_metadata(kb_name, kb_dir, {**file_metadata, **metadata})
+        _merge_scoped_metadata(metadata, file_metadata)
+        _merge_scoped_metadata(metadata, inferred_metadata)
         metadata.update(self._embedding_fields(kb_config))
 
         # Remove None values

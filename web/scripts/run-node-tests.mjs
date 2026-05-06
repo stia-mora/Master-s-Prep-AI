@@ -1,4 +1,4 @@
-import { readdirSync, rmSync, statSync } from "node:fs";
+﻿import { readdirSync, rmSync, statSync } from "node:fs";
 import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -15,6 +15,10 @@ function run(cmd, args) {
     stdio: "inherit",
     env: process.env,
   });
+  if (result.error) {
+    console.error(result.error);
+    process.exit(1);
+  }
   if (result.status !== 0) {
     process.exit(result.status ?? 1);
   }
@@ -40,7 +44,8 @@ function collectTests(dir) {
 
 rmSync(distRoot, { recursive: true, force: true });
 
-run(path.join(webRoot, "node_modules", ".bin", "tsc"), [
+run(process.execPath, [
+  path.join(webRoot, "node_modules", "typescript", "bin", "tsc"),
   "-p",
   "tsconfig.node-tests.json",
 ]);

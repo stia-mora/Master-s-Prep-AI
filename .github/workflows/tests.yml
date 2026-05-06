@@ -12,6 +12,8 @@ on:
       - "requirements/**"
       - "requirements.txt"
       - "pyproject.toml"
+      - "web/**"
+      - "package*.json"
       - ".github/workflows/tests.yml"
   pull_request:
     branches:
@@ -24,6 +26,8 @@ on:
       - "requirements/**"
       - "requirements.txt"
       - "pyproject.toml"
+      - "web/**"
+      - "package*.json"
       - ".github/workflows/tests.yml"
 
 jobs:
@@ -59,14 +63,14 @@ jobs:
 
       - name: Check module imports
         run: |
-          echo "🐍 Testing with Python ${{ matrix.python-version }}"
-          python -c "from deeptutor.runtime.orchestrator import ChatOrchestrator; print('✅ Orchestrator imports OK')"
-          python -c "from deeptutor.runtime.registry.tool_registry import get_tool_registry; print('✅ Tool registry imports OK')"
-          python -c "from deeptutor.runtime.registry.capability_registry import get_capability_registry; print('✅ Capability registry imports OK')"
-          python -c "from deeptutor.services.config.env_store import EnvStore; print('✅ EnvStore imports OK')"
-          python -c "from deeptutor.api.routers.unified_ws import unified_websocket; print('✅ Unified WS imports OK')"
-          python -c "from deeptutor.services.prompt.manager import PromptManager; print('✅ Prompt manager imports OK')"
-          python -c "from deeptutor.logging import get_logger; print('✅ Logging imports OK')"
+          echo "Testing with Python ${{ matrix.python-version }}"
+          python -c "from deeptutor.runtime.orchestrator import ChatOrchestrator; print('Orchestrator imports OK')"
+          python -c "from deeptutor.runtime.registry.tool_registry import get_tool_registry; print('Tool registry imports OK')"
+          python -c "from deeptutor.runtime.registry.capability_registry import get_capability_registry; print('Capability registry imports OK')"
+          python -c "from deeptutor.services.config.env_store import EnvStore; print('EnvStore imports OK')"
+          python -c "from deeptutor.api.routers.unified_ws import unified_websocket; print('Unified WS imports OK')"
+          python -c "from deeptutor.services.prompt.manager import PromptManager; print('Prompt manager imports OK')"
+          python -c "from deeptutor.logging import get_logger; print('Logging imports OK')"
         env:
           PYTHONPATH: ${{ github.workspace }}
 
@@ -97,7 +101,10 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements/server.txt
           pip install -r requirements/tutorbot.txt
-          pip install pytest pytest-asyncio
+          pip install pytest pytest-asyncio ruff
+
+      - name: Run Ruff
+        run: python -m ruff check deeptutor tests
 
       - name: Create minimal runtime config
         run: |
@@ -111,7 +118,7 @@ jobs:
 
       - name: Run smoke tests
         run: |
-          echo "🧪 Running smoke test subset"
+          echo "Running smoke test subset"
           pytest -q --import-mode=importlib \
             tests/api \
             tests/cli \
@@ -123,22 +130,55 @@ jobs:
         env:
           PYTHONPATH: ${{ github.workspace }}
 
+
+  web-quality:
+    name: Web Quality Gate
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+
+      - name: Install frontend dependencies
+        working-directory: web
+        run: npm ci
+
+      - name: Typecheck frontend
+        working-directory: web
+        run: npx tsc --noEmit
+
+      - name: Lint frontend
+        working-directory: web
+        run: npm run lint
+
+      - name: Run frontend node tests
+        working-directory: web
+        run: npm run test:node
+
   test-summary:
     name: Test Summary
     runs-on: ubuntu-latest
-    needs: [import-check, smoke-tests]
+    needs: [import-check, smoke-tests, web-quality]
     if: always()
 
     steps:
       - name: Check test results
         run: |
-          echo "## 🧪 Test Results Summary" >> $GITHUB_STEP_SUMMARY
+          echo "## Test Results Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "| Check | Status |" >> $GITHUB_STEP_SUMMARY
           echo "|-------|--------|" >> $GITHUB_STEP_SUMMARY
-          echo "| Import check (3.11/3.12) | ${{ needs.import-check.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
-          echo "| Smoke tests (3.11) | ${{ needs.smoke-tests.result == 'success' && '✅ Passed' || '❌ Failed' }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Import check (3.11/3.12) | ${{ needs.import-check.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Smoke tests (3.11) | ${{ needs.smoke-tests.result }} |" >> $GITHUB_STEP_SUMMARY
+          echo "| Web quality gate | ${{ needs.web-quality.result }} |" >> $GITHUB_STEP_SUMMARY
 
       - name: Fail if tests failed
-        if: needs.import-check.result == 'failure' || needs.smoke-tests.result == 'failure'
+        if: needs.import-check.result == 'failure' || needs.smoke-tests.result == 'failure' || needs.web-quality.result == 'failure'
         run: exit 1

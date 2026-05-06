@@ -48,6 +48,7 @@ type QuestionNotebookReferencePayload = number[];
 export interface SendMessageOptions {
   displayUserMessage?: boolean;
   persistUserMessage?: boolean;
+  forceNewSession?: boolean;
   requestSnapshotOverride?: MessageRequestSnapshot;
 }
 
@@ -66,6 +67,7 @@ interface SessionStatusSnapshot {
   sessionId: string;
   status: SessionRuntimeStatus;
   activeTurnId: string | null;
+  currentStage: string;
   updatedAt: number;
 }
 
@@ -134,7 +136,14 @@ type Action =
     }
   | { type: "POP_LAST_ASSISTANT"; key: string }
   | { type: "RESTORE_ASSISTANT"; key: string; message: MessageItem }
-  | { type: "STREAM_START"; key: string }
+  | {
+      type: "STREAM_START";
+      key: string;
+      tools?: string[];
+      capability?: string | null;
+      knowledgeBases?: string[];
+      language?: string;
+    }
   | { type: "STREAM_EVENT"; key: string; event: StreamEvent }
   | {
       type: "STREAM_END";
@@ -234,6 +243,7 @@ function reducer(state: ProviderState, action: Action): ProviderState {
         state.sessions[action.key] ?? createSessionEntry(action.key);
       return {
         ...state,
+        selectedKey: action.key,
         sessions: {
           ...state.sessions,
           [action.key]: {
@@ -303,30 +313,41 @@ function reducer(state: ProviderState, action: Action): ProviderState {
         },
       };
     }
-    case "STREAM_START":
+    case "STREAM_START": {
+      const session = state.sessions[action.key] ?? createSessionEntry(action.key);
+      const nextCapability =
+        action.capability !== undefined ? action.capability : session.activeCapability;
+      const nextTools = action.tools ?? session.enabledTools;
+      const nextKnowledgeBases = action.knowledgeBases ?? session.knowledgeBases;
+      const nextLanguage = action.language ?? session.language;
       return {
         ...state,
+        selectedKey: action.key,
         sessions: {
           ...state.sessions,
           [action.key]: {
-            ...(state.sessions[action.key] ?? createSessionEntry(action.key)),
+            ...session,
+            enabledTools: nextTools,
+            activeCapability: nextCapability,
+            knowledgeBases: nextKnowledgeBases,
+            language: nextLanguage,
             isStreaming: true,
+            currentStage: "\u6b63\u5728\u7b49\u5f85\u6a21\u578b\u54cd\u5e94",
             status: "running",
             messages: [
-              ...(state.sessions[action.key]?.messages ?? []),
+              ...session.messages,
               {
                 role: "assistant",
                 content: "",
                 events: [],
-                capability:
-                  (state.sessions[action.key] ?? createSessionEntry(action.key))
-                    .activeCapability || "",
+                capability: nextCapability || "",
               },
             ],
             updatedAt: Date.now(),
           },
         },
       };
+    }
     case "STREAM_EVENT": {
       const session =
         state.sessions[action.key] ?? createSessionEntry(action.key);
@@ -836,9 +857,9 @@ export function UnifiedChatProvider({
         mime_type: a.mime_type,
       }));
       const currentState = stateRef.current;
-      let key = currentState.selectedKey;
-      if (!key) {
-        key = makeDraftKey();
+      let key = options?.forceNewSession ? makeDraftKey() : currentState.selectedKey;
+      if (!key || !currentState.sessions[key]) {
+        key = key || makeDraftKey();
         dispatch({ type: "NEW_SESSION", key });
       }
       const session = currentState.sessions[key] ?? createSessionEntry(key);
@@ -889,7 +910,16 @@ export function UnifiedChatProvider({
           requestSnapshot,
         });
       }
-      dispatch({ type: "STREAM_START", key });
+      dispatch({
+        type: "STREAM_START",
+        key,
+        tools: [...effectiveTools],
+        capability: effectiveCapability,
+        knowledgeBases: shouldSendKnowledgeBases
+          ? [...effectiveKnowledgeBases]
+          : [],
+        language: effectiveLanguage,
+      });
       const effectiveConfig =
         options?.persistUserMessage === false
           ? { ...(config || {}), _persist_user_message: false }
@@ -989,6 +1019,7 @@ export function UnifiedChatProvider({
         sessionId: session.sessionId,
         status: session.status,
         activeTurnId: session.activeTurnId,
+        currentStage: session.currentStage,
         updatedAt: session.updatedAt,
       };
     }

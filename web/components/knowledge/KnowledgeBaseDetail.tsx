@@ -13,6 +13,8 @@ import {
 import type { KnowledgeUploadPolicy } from "@/lib/knowledge-api";
 import {
   formatKnowledgeTimestamp,
+  getKnowledgeBaseDebugName,
+  getKnowledgeBaseDisplayName,
   type KnowledgeBase,
 } from "@/lib/knowledge-helpers";
 import type { TaskState } from "@/hooks/useKnowledgeProgress";
@@ -95,6 +97,8 @@ export default function KnowledgeBaseDetail({
   }
 
   const meta = kb.metadata || {};
+  const displayName = getKnowledgeBaseDisplayName(kb);
+  const debugName = getKnowledgeBaseDebugName(kb);
   const provider = kb.statistics?.rag_provider || "llamaindex";
   const embeddingLabel = meta.embedding_model
     ? typeof meta.embedding_dim === "number"
@@ -117,7 +121,7 @@ export default function KnowledgeBaseDetail({
           <div className="min-w-0 flex-1">
             <div className="flex flex-wrap items-center gap-2">
               <h1 className="truncate text-[18px] font-semibold tracking-tight text-[var(--foreground)]">
-                {kb.name}
+                {displayName}
               </h1>
               {kb.is_default && (
                 <span className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-medium text-amber-700 dark:bg-amber-950/30 dark:text-amber-300">
@@ -128,8 +132,13 @@ export default function KnowledgeBaseDetail({
               <KbStatusBadge kb={kb} isReindexingLocally={isReindexingLocally} />
             </div>
             <p className="mt-1 text-[12px] text-[var(--muted-foreground)]">
-              {provider} · {embeddingLabel} · {t("Updated")} {updatedLabel}
+              {provider} &middot; {embeddingLabel} &middot; {t("Updated")} {updatedLabel}
             </p>
+            {debugName && (
+              <p className="mt-0.5 truncate text-[11px] text-[var(--muted-foreground)]/75">
+                {debugName}
+              </p>
+            )}
           </div>
         </div>
 

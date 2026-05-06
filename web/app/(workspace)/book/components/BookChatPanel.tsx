@@ -41,7 +41,7 @@ export default function BookChatPanel({
 
   useEffect(() => {
     sessionIdRef.current = null;
-    setMessages([]);
+    queueMicrotask(() => setMessages([]));
   }, [book?.id]);
 
   useEffect(() => {

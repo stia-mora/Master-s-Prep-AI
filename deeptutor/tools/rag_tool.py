@@ -7,12 +7,31 @@ All logic is delegated to RAGService in deeptutor/services/rag/service.py.
 """
 
 import asyncio
+from pathlib import Path
 from typing import Dict, List, Optional
+
+from deeptutor.auth import get_current_user_id
 
 # Import RAGService as the single entry point
 from deeptutor.services.rag.service import DEFAULT_KB_BASE_DIR, RAGService
 
 
+def _user_kb_base_dir() -> Optional[str]:
+    user_id = get_current_user_id()
+    if not user_id:
+        return None
+    safe = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in user_id)
+    return str(Path(DEFAULT_KB_BASE_DIR).parents[1] / "users" / safe / "knowledge_bases")
+
+
+def _select_kb_base_dir(kb_name: Optional[str], kb_base_dir: Optional[str]) -> Optional[str]:
+    if kb_base_dir:
+        return kb_base_dir
+    requested = str(kb_name or "").strip()
+    user_base = _user_kb_base_dir()
+    if user_base and requested and (Path(user_base) / requested).exists():
+        return user_base
+    return DEFAULT_KB_BASE_DIR
 DEFAULT_KB_ALIASES = {"", "default", "current", "selected", "默认", "默认知识库", "当前知识库"}
 
 
@@ -22,7 +41,7 @@ def _resolve_kb_name(kb_name: Optional[str], kb_base_dir: Optional[str] = None) 
     try:
         from deeptutor.knowledge.manager import KnowledgeBaseManager
 
-        manager = KnowledgeBaseManager(base_dir=kb_base_dir or DEFAULT_KB_BASE_DIR)
+        manager = KnowledgeBaseManager(base_dir=_select_kb_base_dir(requested, kb_base_dir))
         kb_names = manager.list_knowledge_bases()
         if requested and requested in kb_names:
             return requested
@@ -65,8 +84,9 @@ async def rag_search(
                 "provider": str
             }
     """
-    service = RAGService(kb_base_dir=kb_base_dir, provider=provider)
-    resolved_kb_name = _resolve_kb_name(kb_name, kb_base_dir=kb_base_dir)
+    selected_base_dir = _select_kb_base_dir(kb_name, kb_base_dir)
+    service = RAGService(kb_base_dir=selected_base_dir, provider=provider)
+    resolved_kb_name = _resolve_kb_name(kb_name, kb_base_dir=selected_base_dir)
     if not resolved_kb_name:
         raise ValueError("No knowledge base selected and no default knowledge base is configured.")
 

@@ -233,11 +233,13 @@ class ManimRenderService:
         content_type: str,
         label: str,
     ) -> RenderedArtifact:
-        rel_path = artifact_path.resolve().relative_to(self.path_service.user_data_dir.resolve())
+        artifact_url = self.path_service.public_output_url_for(artifact_path)
+        if artifact_url is None:
+            raise ManimRenderError("Rendered artifact is outside the public output allowlist.")
         return RenderedArtifact(
             type=artifact_type,
             filename=artifact_path.name,
-            url=f"/api/outputs/{rel_path.as_posix()}",
+            url=artifact_url,
             content_type=content_type,
             label=label,
         )

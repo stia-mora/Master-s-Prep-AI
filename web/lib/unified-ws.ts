@@ -189,13 +189,13 @@ export class UnifiedWSClient {
     };
 
     this.ws.onerror = (err) => {
-      console.error("WS error:", err);
+      console.warn("WS error:", err);
     };
   }
 
   send(msg: ChatMessage): void {
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.error("WebSocket not connected");
+      console.warn("WebSocket not connected");
       return;
     }
     this.ws.send(JSON.stringify(msg));

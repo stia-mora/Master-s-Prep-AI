@@ -3,6 +3,8 @@
 import { useTranslation } from "react-i18next";
 import { Star, Trash2 } from "lucide-react";
 import {
+  getKnowledgeBaseDebugName,
+  getKnowledgeBaseDisplayName,
   kbHasLiveProgress,
   kbNeedsReindex,
   resolveKbStatus,
@@ -36,6 +38,8 @@ export default function KnowledgeBaseListItem({
   const isReady = status === "ready" && !needsReindex;
   const percent = resolveProgressPercent(kb.progress);
   const docCount = kb.statistics?.raw_documents ?? 0;
+  const displayName = getKnowledgeBaseDisplayName(kb);
+  const debugName = getKnowledgeBaseDebugName(kb);
 
   const subtitle = needsReindex
     ? t("Needs reindex")
@@ -79,11 +83,11 @@ export default function KnowledgeBaseListItem({
               />
             )}
             <span className="truncate text-[13px] font-medium text-[var(--foreground)]">
-              {kb.name}
+              {displayName}
             </span>
           </div>
           <div className="mt-0.5 truncate text-[11px] text-[var(--muted-foreground)]">
-            {subtitle}
+            {debugName ? `${subtitle} · ${debugName}` : subtitle}
           </div>
         </div>
 

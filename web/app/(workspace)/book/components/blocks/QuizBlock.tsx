@@ -88,7 +88,7 @@ function QuizQuestionCard({
         userAnswer: selected,
         isCorrect: selected.toUpperCase() === correctChoiceKey,
       });
-      setReported(true);
+      queueMicrotask(() => setReported(true));
     }
   }, [
     revealed,
@@ -159,7 +159,7 @@ function QuizQuestionCard({
         <div className="mt-2 text-xs text-[var(--muted-foreground)]">
           {normalizedType === "written"
             ? "Think about your answer, then reveal the solution."
-            : "Open response — click reveal to see the model answer."}
+            : "Open response 鈥?click reveal to see the model answer."}
         </div>
       )}
 

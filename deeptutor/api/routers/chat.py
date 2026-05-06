@@ -105,7 +105,10 @@ async def websocket_chat(websocket: WebSocket):
     - {"type": "result", "content": str}               # Final complete response
     - {"type": "error", "message": str}                # Error message
     """
-    await websocket.accept()
+    from deeptutor.auth import require_websocket_user
+
+    if await require_websocket_user(websocket) is None:
+        return
 
     try:
         while True:

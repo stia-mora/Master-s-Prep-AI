@@ -1,9 +1,10 @@
 from contextlib import asynccontextmanager
 import logging
+import mimetypes
 
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse, JSONResponse
 
 from deeptutor.logging import get_logger
 from deeptutor.services.path_service import get_path_service
@@ -30,18 +31,6 @@ CONFIG_DRIFT_ERROR_TEMPLATE = (
     "remove the stale tool names from the capability manifests."
 )
 
-
-class SafeOutputStaticFiles(StaticFiles):
-    """Static file mount that only exposes explicitly whitelisted artifacts."""
-
-    def __init__(self, *args, path_service, **kwargs):
-        super().__init__(*args, **kwargs)
-        self._path_service = path_service
-
-    async def get_response(self, path: str, scope):
-        if not self._path_service.is_public_output_path(path):
-            raise HTTPException(status_code=404, detail="Output not found")
-        return await super().get_response(path, scope)
 
 
 def validate_tool_consistency():
@@ -146,6 +135,21 @@ app = FastAPI(
     redirect_slashes=False,
 )
 
+@app.middleware("http")
+async def auth_context_middleware(request: Request, call_next):
+    from deeptutor.auth import current_user_context, get_auth_store, user_from_request
+
+    path = request.url.path
+    public_prefixes = ("/api/v1/auth",)
+    public_paths = {"/", "/api/v1/system/status"}
+    is_public = request.method == "OPTIONS" or path in public_paths or any(path.startswith(prefix) for prefix in public_prefixes)
+    user = user_from_request(request)
+    if user is None and not is_public and (path.startswith("/api/v1") or path.startswith("/api/attachments") or path.startswith("/api/outputs")):
+        detail = "Setup required" if not get_auth_store().has_users() else "Authentication required"
+        return JSONResponse({"detail": detail}, status_code=401)
+    with current_user_context(user.user_id if user else None):
+        return await call_next(request)
+
 # Log only non-200 requests (uvicorn access_log is disabled in run_server.py)
 _access_logger = logging.getLogger("uvicorn.access")
 
@@ -165,45 +169,66 @@ async def selective_access_log(request, call_next):
     return response
 
 
+def _cors_origins() -> list[str]:
+    import os
+
+    configured = os.getenv("DEEPTUTOR_CORS_ORIGINS", "")
+    if configured.strip():
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ]
+
+
 # Configure CORS
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # In production, replace with specific frontend origin
+    allow_origins=_cors_origins(),
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
-# Mount a filtered view over user outputs.
-# Only whitelisted artifact paths are readable through the static handler.
+# Initialize user directories on startup. Public outputs are served through a
+# user-aware route below so authenticated users resolve files from their own root.
 path_service = get_path_service()
-user_dir = path_service.get_public_outputs_root()
-
-# Initialize user directories on startup
 try:
     from deeptutor.services.setup import init_user_directories
 
     init_user_directories()
 except Exception:
-    # Fallback: just create the main directory if it doesn't exist
-    if not user_dir.exists():
-        user_dir.mkdir(parents=True)
+    fallback_dir = path_service.get_public_outputs_root()
+    if not fallback_dir.exists():
+        fallback_dir.mkdir(parents=True)
 
-app.mount(
-    "/api/outputs",
-    SafeOutputStaticFiles(directory=str(user_dir), path_service=path_service),
-    name="outputs",
-)
+
+@app.get("/api/outputs/{output_path:path}")
+async def public_output(output_path: str):
+    target = path_service.resolve_public_output_path(output_path)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Output not found")
+    media_type, _ = mimetypes.guess_type(target.name)
+    headers = {"Cache-Control": "private, max-age=0, must-revalidate"}
+    return FileResponse(
+        path=str(target),
+        media_type=media_type or "application/octet-stream",
+        headers=headers,
+    )
 
 # Import routers only after runtime settings are initialized.
 # Some router modules load YAML settings at import time.
 from deeptutor.api.routers import (
     agent_config,
     attachments,
+    auth,
     book,
     chat,
     co_writer,
     dashboard,
+    kaoyan,
     knowledge,
     memory,
     notebook,
@@ -221,10 +246,12 @@ from deeptutor.api.routers import (
 )
 
 # Include routers
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(solve.router, prefix="/api/v1", tags=["solve"])
 app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
 app.include_router(question.router, prefix="/api/v1/question", tags=["question"])
 app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["knowledge"])
+app.include_router(kaoyan.router, prefix="/api/v1/kaoyan", tags=["kaoyan"])
 app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(co_writer.router, prefix="/api/v1/co_writer", tags=["co_writer"])
 app.include_router(notebook.router, prefix="/api/v1/notebook", tags=["notebook"])

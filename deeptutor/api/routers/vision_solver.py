@@ -144,7 +144,10 @@ async def websocket_vision_solve(websocket: WebSocket):
        - {"type": "text", "content": "..."}
        - {"type": "done"}
     """
-    await websocket.accept()
+    from deeptutor.auth import require_websocket_user
+
+    if await require_websocket_user(websocket) is None:
+        return
 
     connection_closed = asyncio.Event()
 

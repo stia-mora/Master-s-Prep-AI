@@ -12,17 +12,16 @@ from pptx.util import Inches
 import pytest
 
 from deeptutor.utils.document_extractor import (
+    MAX_DOC_BYTES,
+    MAX_EXTRACTED_CHARS_PER_DOC,
     CorruptDocumentError,
     DocumentTooLargeError,
     EmptyDocumentError,
-    MAX_DOC_BYTES,
-    MAX_EXTRACTED_CHARS_PER_DOC,
     UnsupportedDocumentError,
     extract_documents_from_records,
     extract_text_from_bytes,
     is_document_extension,
 )
-
 
 # ---------------------------------------------------------------------------
 # Fixtures — generate office docs on the fly

@@ -1,7 +1,7 @@
 /* eslint-disable i18n/no-literal-ui-text */
 "use client";
 
-import { Suspense, useCallback, useEffect, useRef, useState } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   Brain,
   ChevronDown,
@@ -34,7 +34,7 @@ type CatalogModel = {
   model: string;
   dimension?: string;
   send_dimensions?: boolean;
-  // CSV of dims supported natively by the current model — refreshed by the
+  // CSV of dims supported natively by the current model 鈥?refreshed by the
   // backend on every successful "Run test" for an embedding service.
   supported_dimensions?: string;
   context_window?: string;
@@ -261,16 +261,10 @@ function SpotlightOverlay({
   onSkip: () => void;
 }) {
   const { t } = useTranslation();
-  const [rect, setRect] = useState<DOMRect | null>(null);
   const guideStep = TOUR_GUIDE_STEPS[stepIndex];
-
-  useEffect(() => {
-    if (!guideStep) return;
-    const el = document.querySelector(`[data-tour="${guideStep.target}"]`);
-    if (el) {
-      const r = el.getBoundingClientRect();
-      setRect(r);
-    }
+  const rect = useMemo(() => {
+    if (!guideStep || typeof document === "undefined") return null;
+    return document.querySelector(`[data-tour="${guideStep.target}"]`)?.getBoundingClientRect() ?? null;
   }, [guideStep]);
 
   if (!guideStep || !rect) return null;
@@ -330,8 +324,8 @@ function SpotlightOverlay({
 }
 
 // ---------------------------------------------------------------------------
-// Embedding dimension field — dropdown when supported list is known, free
-// input otherwise, with a "Detected: Xd · Use this" affordance after a test.
+// Embedding dimension field 鈥?dropdown when supported list is known, free
+// input otherwise, with a "Detected: Xd 路 Use this" affordance after a test.
 // ---------------------------------------------------------------------------
 
 const CUSTOM_DIM_SENTINEL = "__custom__";
@@ -386,7 +380,7 @@ function DimensionField({
 }) {
   const { t } = useTranslation();
   const fallback = embeddingDefaultDim(activeBinding);
-  // Raw catalog state — empty string means "not yet configured / auto on
+  // Raw catalog state 鈥?empty string means "not yet configured / auto on
   // next test". We never substitute the fallback into the input value, only
   // into the placeholder, so the user can fully clear the field.
   const rawValue = activeModel.dimension ?? "";
@@ -405,11 +399,11 @@ function DimensionField({
   const currentInList =
     Number.isFinite(currentNum) && supported.includes(currentNum);
   // True when the user explicitly opted out of the dropdown by picking
-  // "Custom…". Stays true until they click "Use a supported value" or pick
+  // "Custom鈥?. Stays true until they click "Use a supported value" or pick
   // a real value from the dropdown again.
   const [customRequested, setCustomRequested] = useState<boolean>(false);
   // Force custom mode when the catalog has a non-empty value that isn't in
-  // the list — that's a sign the user typed something custom and we should
+  // the list 鈥?that's a sign the user typed something custom and we should
   // respect it. Empty catalog stays in dropdown mode (showing "Auto").
   const customMode =
     customRequested || (useDropdown && !isEmpty && !currentInList);
@@ -431,7 +425,7 @@ function DimensionField({
       return;
     }
     setCustomRequested(false);
-    // AUTO_DIM_SENTINEL is "" — clears the catalog, triggers auto-fill on
+    // AUTO_DIM_SENTINEL is "" 鈥?clears the catalog, triggers auto-fill on
     // the next test. Real numeric values flow through unchanged.
     onChangeDimension(value);
   };
@@ -459,7 +453,7 @@ function DimensionField({
               {dim}
             </option>
           ))}
-          <option value={CUSTOM_DIM_SENTINEL}>{t("Custom…")}</option>
+          <option value={CUSTOM_DIM_SENTINEL}>{t("Custom")}</option>
         </select>
       ) : (
         <input
@@ -524,9 +518,9 @@ function DimensionField({
   );
 }
 
-// ═══════════════════════════════════════════════════════════════════════════
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 // Main component
-// ═══════════════════════════════════════════════════════════════════════════
+// 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 
 function SettingsPageContent() {
   const { t } = useTranslation();
@@ -591,7 +585,7 @@ function SettingsPageContent() {
 
   // Reset stale ``embeddingCapabilities`` whenever the active embedding
   // profile or model changes. Without this, a 4096d detection on profile A
-  // bleeds into profile B's "Detected: …" affordance after a switch.
+  // bleeds into profile B's "Detected: 鈥? affordance after a switch.
   useEffect(() => {
     setEmbeddingCapabilities(null);
   }, [
@@ -943,14 +937,14 @@ function SettingsPageContent() {
     setTourGuideStep(0);
   }, []);
 
-  // ═══════════════════════════════════════════════════════════════════════
+  // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
   // Render
-  // ═══════════════════════════════════════════════════════════════════════
+  // 鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺愨晲鈺?
 
   return (
     <div className="h-full overflow-y-auto [scrollbar-gutter:stable]">
       <div className="mx-auto max-w-[960px] px-6 py-8">
-        {/* ── Header ── */}
+        {/* 鈹€鈹€ Header 鈹€鈹€ */}
         <div className="mb-6 flex items-start justify-between">
           <div>
             <h1 className="text-[24px] font-semibold tracking-tight text-[var(--foreground)]">
@@ -1005,7 +999,7 @@ function SettingsPageContent() {
           </div>
         </div>
 
-        {/* ── Preferences & Runtime ── */}
+        {/* 鈹€鈹€ Preferences & Runtime 鈹€鈹€ */}
         <div className="mb-8 flex flex-wrap items-center gap-x-8 gap-y-3 border-b border-[var(--border)]/50 pb-6">
           <div className="flex items-center gap-2">
             <span className="text-[12px] text-[var(--muted-foreground)]">
@@ -1069,7 +1063,7 @@ function SettingsPageContent() {
               {t("LLM")}
               {status?.llm.model && (
                 <span className="text-[var(--muted-foreground)]/50">
-                  · {status.llm.model}
+                  路 {status.llm.model}
                 </span>
               )}
             </span>
@@ -1088,7 +1082,7 @@ function SettingsPageContent() {
           </div>
         </div>
 
-        {/* ── Service Configuration ── */}
+        {/* 鈹€鈹€ Service Configuration 鈹€鈹€ */}
         <div className="mb-8">
           <div className="mb-5 flex items-center justify-between">
             <div className="flex items-center gap-1">
@@ -1133,7 +1127,7 @@ function SettingsPageContent() {
 
           {activeProfile ? (
             <div className="grid grid-cols-[200px_1fr] gap-5">
-              {/* ── Profile list ── */}
+              {/* 鈹€鈹€ Profile list 鈹€鈹€ */}
               <div className="space-y-1">
                 {draft.services[activeService].profiles.map((profile) => (
                   <button
@@ -1173,7 +1167,7 @@ function SettingsPageContent() {
                 </button>
               </div>
 
-              {/* ── Editor ── */}
+              {/* 鈹€鈹€ Editor 鈹€鈹€ */}
               <div className="space-y-5">
                 <div className="rounded-xl border border-[var(--border)] p-5">
                   <div className="mb-4 text-[13px] font-medium text-[var(--foreground)]">
@@ -1544,7 +1538,7 @@ function SettingsPageContent() {
           )}
         </div>
 
-        {/* ── Diagnostics ── */}
+        {/* 鈹€鈹€ Diagnostics 鈹€鈹€ */}
         <div className="mb-6 rounded-xl border border-[var(--border)]">
           <div className="flex items-center justify-between px-5 py-3.5">
             <button
@@ -1606,13 +1600,13 @@ function SettingsPageContent() {
           )}
         </div>
 
-        {/* ── Footer note ── */}
+        {/* 鈹€鈹€ Footer note 鈹€鈹€ */}
         <p className="mt-2 pb-4 text-[11px] leading-relaxed text-[var(--muted-foreground)]/40">
           {t("settings.configNote")}
         </p>
       </div>
 
-      {/* ── Spotlight overlay (tour onboarding) ── */}
+      {/* 鈹€鈹€ Spotlight overlay (tour onboarding) 鈹€鈹€ */}
       {tourGuideStep >= 0 &&
         tourGuideStep < TOUR_GUIDE_STEPS.length &&
         (

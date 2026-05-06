@@ -3,8 +3,8 @@
 from __future__ import annotations
 
 import asyncio
-import contextlib
 from collections.abc import AsyncGenerator, Mapping
+import contextlib
 from types import SimpleNamespace
 from typing import Any, TypedDict
 

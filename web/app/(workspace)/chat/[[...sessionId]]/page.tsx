@@ -215,6 +215,7 @@ const CAPABILITIES: CapabilityDef[] = [
 interface KnowledgeBase {
   name: string;
   is_default?: boolean;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface PendingAttachment {
@@ -224,6 +225,15 @@ interface PendingAttachment {
   previewUrl?: string;
   size?: number;
   mimeType?: string;
+}
+
+interface PendingKaoyanChatRequest {
+  content: string;
+  capability?: string | null;
+  enabledTools?: ToolName[];
+  knowledgeBases?: string[];
+  language?: string;
+  config?: Record<string, unknown>;
 }
 
 /* ------------------------------------------------------------------ */
@@ -315,6 +325,7 @@ export default function ChatPage() {
   const skillMenuRef = useRef<HTMLDivElement>(null);
   const skillBtnRef = useRef<HTMLButtonElement>(null);
   const initialLoadRef = useRef(false);
+  const pendingKaoyanAutoRef = useRef(false);
 
   const activeCap = useMemo(
     () => getCapability(state.activeCapability),
@@ -427,6 +438,45 @@ export default function ChatPage() {
     lastMessageContent: lastMessage?.content,
     lastEventCount: lastMessage?.events?.length,
   });
+  useEffect(() => {
+    if (typeof window === "undefined" || pendingKaoyanAutoRef.current) return;
+    const raw = window.sessionStorage.getItem("kaoyan:auto-chat");
+    if (!raw) return;
+    pendingKaoyanAutoRef.current = true;
+    window.sessionStorage.removeItem("kaoyan:auto-chat");
+    try {
+      const payload = JSON.parse(raw) as PendingKaoyanChatRequest;
+      const capability = payload.capability || "deep_solve";
+      const enabledTools = payload.enabledTools?.length ? payload.enabledTools : ["rag", "reason"];
+      const knowledgeBases = payload.knowledgeBases || [];
+      setCapability(capability);
+      setTools(enabledTools);
+      setKBs(knowledgeBases);
+      window.setTimeout(() => {
+        sendMessage(
+          payload.content,
+          undefined,
+          payload.config,
+          undefined,
+          undefined,
+          {
+            forceNewSession: true,
+            requestSnapshotOverride: {
+              content: payload.content,
+              capability,
+              enabledTools,
+              knowledgeBases,
+              language: payload.language || "zh",
+              config: payload.config,
+            },
+          },
+        );
+        shouldAutoScrollRef.current = true;
+      }, 0);
+    } catch (error) {
+      console.error("Failed to restore kaoyan AI chat request:", error);
+    }
+  }, [sendMessage, setCapability, setKBs, setTools, shouldAutoScrollRef]);
   const copyAssistantMessage = useCallback(async (content: string) => {
     if (!content.trim()) return;
     try {
@@ -492,7 +542,7 @@ export default function ChatPage() {
       void loadSession(sessionIdParam).catch(() => {
         router.replace("/chat", { scroll: false });
       });
-    } else {
+    } else if (!state.messages.length && !state.isStreaming && !state.sessionId) {
       newSession();
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -506,10 +556,10 @@ export default function ChatPage() {
       void loadSession(sessionIdParam).catch(() => {
         router.replace("/chat", { scroll: false });
       });
-    } else {
+    } else if (!state.messages.length && !state.isStreaming && !state.sessionId) {
       newSession();
     }
-  }, [sessionIdParam, loadSession, newSession, router]);
+  }, [sessionIdParam, loadSession, newSession, router, state.messages.length, state.isStreaming, state.sessionId]);
 
   // When a new session_id is assigned by the server, update the URL
   useEffect(() => {

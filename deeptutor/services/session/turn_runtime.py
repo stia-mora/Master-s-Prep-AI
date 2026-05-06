@@ -12,6 +12,7 @@ import json
 import logging
 from typing import Any
 
+from deeptutor.auth import current_user_context, get_current_user_id
 from deeptutor.core.stream import StreamEvent, StreamEventType
 from deeptutor.services.path_service import get_path_service
 from deeptutor.services.session.sqlite_store import SQLiteSessionStore, get_sqlite_session_store
@@ -280,6 +281,7 @@ class TurnRuntimeManager:
 
     async def start_turn(self, payload: dict[str, Any]) -> tuple[dict[str, Any], dict[str, Any]]:
         capability = str(payload.get("capability") or "chat")
+        user_id = str(payload.get("user_id") or get_current_user_id() or "local-user")
         raw_config = dict(payload.get("config", {}) or {})
         runtime_only_keys = (
             "_persist_user_message",
@@ -303,7 +305,8 @@ class TurnRuntimeManager:
             "capability": capability,
             "config": {**validated_public_config, **runtime_only_config},
         }
-        session = await self.store.ensure_session(payload.get("session_id"))
+        payload["user_id"] = user_id
+        session = await self.store.ensure_session(payload.get("session_id"), user_id=user_id)
         await self.store.update_session_preferences(
             session["id"],
             {
@@ -312,8 +315,9 @@ class TurnRuntimeManager:
                 "knowledge_bases": list(payload.get("knowledge_bases") or []),
                 "language": str(payload.get("language") or "en"),
             },
+            user_id=user_id,
         )
-        turn = await self.store.create_turn(session["id"], capability=capability)
+        turn = await self.store.create_turn(session["id"], capability=capability, user_id=user_id)
         execution = _TurnExecution(
             turn_id=turn["id"],
             session_id=session["id"],
@@ -342,7 +346,8 @@ class TurnRuntimeManager:
         )
         async with self._lock:
             self._executions[turn["id"]] = execution
-            execution.task = asyncio.create_task(self._run_turn(execution))
+            with current_user_context(user_id):
+                execution.task = asyncio.create_task(self._run_turn(execution))
         return session, turn
 
     async def regenerate_last_turn(
@@ -416,6 +421,7 @@ class TurnRuntimeManager:
             config["_superseded_turn_id"] = previous_turn_id
 
         payload: dict[str, Any] = {
+            "user_id": str(overrides.get("user_id") or get_current_user_id() or "local-user"),
             "session_id": session_id,
             "capability": capability,
             "content": str(last_user.get("content", "") or ""),
@@ -440,9 +446,13 @@ class TurnRuntimeManager:
     async def cancel_turn(self, turn_id: str) -> bool:
         async with self._lock:
             execution = self._executions.get(turn_id)
+        if execution is not None and await self.store.get_session(execution.session_id) is None:
+            return False
         if execution is None or execution.task is None or execution.task.done():
             turn = await self.store.get_turn(turn_id)
             if turn is None or turn.get("status") != "running":
+                return False
+            if await self.store.get_session(str(turn.get("session_id") or "")) is None:
                 return False
             await self.store.update_turn_status(turn_id, "cancelled", "Turn cancelled")
             return True
@@ -454,6 +464,9 @@ class TurnRuntimeManager:
         turn_id: str,
         after_seq: int = 0,
     ) -> AsyncIterator[dict[str, Any]]:
+        turn = await self.store.get_turn(turn_id)
+        if turn is None or await self.store.get_session(str(turn.get("session_id") or "")) is None:
+            return
         backlog = await self.store.get_turn_events(turn_id, after_seq=after_seq)
         last_seq = after_seq
         for item in backlog:
@@ -506,6 +519,8 @@ class TurnRuntimeManager:
         session_id: str,
         after_seq: int = 0,
     ) -> AsyncIterator[dict[str, Any]]:
+        if await self.store.get_session(session_id) is None:
+            return
         active_turn = await self.store.get_active_turn(session_id)
         if active_turn is None:
             return

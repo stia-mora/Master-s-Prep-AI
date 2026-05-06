@@ -5,13 +5,16 @@ import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { type ReactNode } from "react";
 import { useAppShell } from "@/context/AppShellContext";
+import { useAuth } from "@/context/AuthContext";
 import {
   BookOpen,
   Bot,
   Github,
+  GraduationCap,
   LayoutGrid,
   Library,
   MessageSquare,
+  LogOut,
   PanelLeftClose,
   PanelLeftOpen,
   PenLine,
@@ -32,6 +35,7 @@ interface NavEntry {
 }
 
 const PRIMARY_NAV: NavEntry[] = [
+  { href: "/kaoyan", label: "考研助手", icon: GraduationCap },
   { href: "/chat", label: "Chat", icon: MessageSquare },
   { href: "/agents", label: "TutorBot", icon: Bot },
   { href: "/co-writer", label: "Co-Writer", icon: PenLine },
@@ -76,6 +80,7 @@ export function SidebarShell({
   const { t } = useTranslation();
   const { sidebarCollapsed: collapsed, setSidebarCollapsed: setCollapsed } =
     useAppShell();
+  const { user, logout } = useAuth();
 
   const handleNewChat = () => {
     if (onNewChat) {
@@ -113,7 +118,7 @@ export function SidebarShell({
           </button>
         </div>
 
-        {/* New chat — visually distinct circular button */}
+        {/* New chat - visually distinct circular button */}
         <button
           onClick={handleNewChat}
           title={t("New Chat") as string}
@@ -186,6 +191,14 @@ export function SidebarShell({
           >
             <Github size={15} strokeWidth={1.6} />
           </a>
+          <button
+            onClick={() => void logout()}
+            title="Logout"
+            aria-label="Logout"
+            className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"
+          >
+            <LogOut size={15} strokeWidth={1.6} />
+          </button>
           <VersionBadge collapsed />
         </div>
       </aside>

@@ -16,6 +16,7 @@ import asyncio
 from datetime import datetime
 import json
 from pathlib import Path
+import sys
 from typing import Any
 
 from deeptutor.services.config import get_agent_params
@@ -66,15 +67,15 @@ def load_parsed_paper(paper_dir: Path) -> tuple[str | None, list[dict] | None, P
     """
     auto_dir = _find_parsed_content_dir(paper_dir)
     if auto_dir != paper_dir:
-        print(f"📂 Using parsed content directory: {auto_dir.relative_to(paper_dir)}")
+        print(f"馃搨 Using parsed content directory: {auto_dir.relative_to(paper_dir)}")
 
     md_files = list(auto_dir.glob("*.md"))
     if not md_files:
-        print(f"✗ Error: No markdown file found in {auto_dir}")
+        print(f"鉁?Error: No markdown file found in {auto_dir}")
         return None, None, auto_dir / "images"
 
     md_file = md_files[0]
-    print(f"📄 Found markdown file: {md_file.name}")
+    print(f"馃搫 Found markdown file: {md_file.name}")
 
     with open(md_file, encoding="utf-8") as f:
         markdown_content = f.read()
@@ -83,18 +84,18 @@ def load_parsed_paper(paper_dir: Path) -> tuple[str | None, list[dict] | None, P
     content_list = None
     if json_files:
         json_file = json_files[0]
-        print(f"📋 Found content_list file: {json_file.name}")
+        print(f"馃搵 Found content_list file: {json_file.name}")
         with open(json_file, encoding="utf-8") as f:
             content_list = json.load(f)
     else:
-        print("⚠️ Warning: content_list.json file not found, will use markdown content only")
+        print("鈿狅笍 Warning: content_list.json file not found, will use markdown content only")
 
     images_dir = auto_dir / "images"
     if images_dir.exists():
         image_count = len(list(images_dir.glob("*")))
-        print(f"🖼️ Found image directory: {image_count} images")
+        print(f"馃柤锔?Found image directory: {image_count} images")
     else:
-        print("⚠️ Warning: images directory not found")
+        print("鈿狅笍 Warning: images directory not found")
 
     return markdown_content, content_list, images_dir
 
@@ -187,10 +188,10 @@ Available image files:
 Please analyze the above exam paper content, extract all question information, and return in JSON format.
 """
 
-    print("\n🤖 Using LLM to analyze questions...")
-    print(f"📊 Model: {model}")
-    print(f"📝 Document length: {len(markdown_content)} characters")
-    print(f"🖼️ Available images: {len(image_list)}")
+    print("\n馃 Using LLM to analyze questions...")
+    print(f"馃搳 Model: {model}")
+    print(f"馃摑 Document length: {len(markdown_content)} characters")
+    print(f"馃柤锔?Available images: {len(image_list)}")
 
     # Get agent parameters from unified config
     agent_params = get_agent_params("question")
@@ -272,7 +273,7 @@ Please analyze the above exam paper content, extract all question information, a
         if result is None:
             raise ValueError("JSON parsing returned None")
     except Exception as e:
-        print(f"✗ JSON parsing error: {e!s}")
+        print(f"鉁?JSON parsing error: {e!s}")
         print(f"LLM response content: {result_text[:500]}...")
         raise ValueError(
             f"Failed to parse LLM JSON response: {e}. "
@@ -280,7 +281,7 @@ Please analyze the above exam paper content, extract all question information, a
         ) from e
 
     questions = result.get("questions", [])
-    print(f"✓ Successfully extracted {len(questions)} questions")
+    print(f"鉁?Successfully extracted {len(questions)} questions")
 
     return questions
 
@@ -312,9 +313,9 @@ def save_questions_json(questions: list[dict[str, Any]], output_dir: Path, paper
     with open(output_file, "w", encoding="utf-8") as f:
         json.dump(output_data, f, ensure_ascii=False, indent=2)
 
-    print(f"💾 Question information saved to: {output_file.name}")
+    print(f"馃捑 Question information saved to: {output_file.name}")
 
-    print("\n📋 Question statistics:")
+    print("\n馃搵 Question statistics:")
     print(f"  Total questions: {len(questions)}")
 
     questions_with_images = sum(1 for q in questions if q.get("images"))
@@ -336,21 +337,21 @@ def extract_questions_from_paper(paper_dir: str, output_dir: str | None = None) 
     """
     paper_dir = Path(paper_dir).resolve()
     if not paper_dir.exists():
-        print(f"✗ Error: Directory does not exist: {paper_dir}")
+        print(f"鉁?Error: Directory does not exist: {paper_dir}")
         return False
 
-    print(f"📁 Paper directory: {paper_dir}")
+    print(f"馃搧 Paper directory: {paper_dir}")
 
     markdown_content, content_list, images_dir = load_parsed_paper(paper_dir)
 
     if not markdown_content:
-        print("✗ Error: Unable to load paper content")
+        print("鉁?Error: Unable to load paper content")
         return False
 
     try:
         llm_config = get_llm_config()
     except ValueError as e:
-        print(f"✗ {e!s}")
+        print(f"鉁?{e!s}")
         print(
             "Tip: Please create .env file in project root and configure LLM-related environment variables"
         )
@@ -368,7 +369,7 @@ def extract_questions_from_paper(paper_dir: str, output_dir: str | None = None) 
     )
 
     if not questions:
-        print("⚠️ Warning: No questions extracted")
+        print("鈿狅笍 Warning: No questions extracted")
         return False
 
     if output_dir is None:
@@ -379,8 +380,8 @@ def extract_questions_from_paper(paper_dir: str, output_dir: str | None = None) 
     paper_name = paper_dir.name
     output_file = save_questions_json(questions, output_dir, paper_name)
 
-    print("\n✓ Question extraction completed!")
-    print(f"📄 View results: {output_file}")
+    print("\n鉁?Question extraction completed!")
+    print(f"馃搫 View results: {output_file}")
 
     return True
 

@@ -250,6 +250,11 @@ export default function SessionList({
                       {session.title || "Untitled chat"}
                     </span>
                   )}
+                  {session.status === "running" && session.current_stage ? (
+                    <span className="max-w-[72px] shrink-0 truncate text-[10px] text-blue-500/80">
+                      {session.current_stage}
+                    </span>
+                  ) : null}
                   <div className="flex shrink-0 items-center gap-px opacity-0 transition-opacity group-hover:opacity-100">
                     {isEditing ? (
                       <button
@@ -361,8 +366,10 @@ export default function SessionList({
                       )}
                       {!isEditing && (
                         <div className="mt-0.5 line-clamp-1 text-[11px] leading-tight text-[var(--muted-foreground)]">
-                          {session.last_message ||
-                            relativeTime(session.updated_at)}
+                          {session.status === "running" && session.current_stage
+                            ? session.current_stage
+                            : session.last_message ||
+                              relativeTime(session.updated_at)}
                         </div>
                       )}
                     </div>

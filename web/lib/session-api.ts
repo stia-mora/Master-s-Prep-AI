@@ -37,6 +37,7 @@ export interface SessionSummary {
     | "cancelled"
     | "rejected";
   active_turn_id?: string;
+  current_stage?: string;
   preferences?: {
     capability?: string;
     tools?: string[];
@@ -115,6 +116,7 @@ export async function listSessions(
         apiUrl(`/api/v1/sessions?limit=${limit}&offset=${offset}`),
         {
           cache: "no-store",
+          credentials: "include",
         },
       );
       const data = await expectJson<{ sessions: SessionSummary[] }>(response);
@@ -130,6 +132,7 @@ export async function listSessions(
 export async function getSession(sessionId: string): Promise<SessionDetail> {
   const response = await fetch(apiUrl(`/api/v1/sessions/${sessionId}`), {
     cache: "no-store",
+    credentials: "include",
   });
   return expectJson<SessionDetail>(response);
 }
@@ -140,6 +143,7 @@ export async function updateSessionTitle(
 ): Promise<SessionDetail> {
   const response = await fetch(apiUrl(`/api/v1/sessions/${sessionId}`), {
     method: "PATCH",
+    credentials: "include",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ title }),
   });
@@ -151,6 +155,7 @@ export async function updateSessionTitle(
 export async function deleteSession(sessionId: string): Promise<void> {
   const response = await fetch(apiUrl(`/api/v1/sessions/${sessionId}`), {
     method: "DELETE",
+    credentials: "include",
   });
   await expectJson<{ deleted: boolean }>(response);
   invalidateClientCache("sessions:");
@@ -164,6 +169,7 @@ export async function recordQuizResults(
     apiUrl(`/api/v1/sessions/${sessionId}/quiz-results`),
     {
       method: "POST",
+      credentials: "include",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ answers }),
     },

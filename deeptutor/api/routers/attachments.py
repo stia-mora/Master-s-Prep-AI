@@ -10,9 +10,8 @@ URL shape::
 
     GET /api/attachments/{session_id}/{attachment_id}/{filename}
 
-The session id functions as the ACL boundary, mirroring how the rest of
-the app treats sessions today (single-tenant, session ownership is local
-trust). Once multi-user auth lands we should swap this for signed URLs.
+The session id functions as the ACL boundary; the router verifies that the
+current authenticated user owns the session before serving any file.
 """
 
 from __future__ import annotations
@@ -24,6 +23,7 @@ from urllib.parse import quote
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import FileResponse
 
+from deeptutor.services.session import get_sqlite_session_store
 from deeptutor.services.storage import (
     LocalDiskAttachmentStore,
     get_attachment_store,
@@ -64,6 +64,9 @@ async def get_attachment(
     the browser still falls back to download, which is fine for the
     drawer's "Download" button path.
     """
+    if await get_sqlite_session_store().get_session(session_id) is None:
+        raise HTTPException(status_code=404, detail="Attachment not found")
+
     store = get_attachment_store()
     if not isinstance(store, LocalDiskAttachmentStore):
         # Future remote backends should issue a redirect to the signed URL

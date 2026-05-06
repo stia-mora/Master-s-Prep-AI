@@ -462,7 +462,10 @@ async def book_websocket(ws: WebSocket) -> None:
         {"type": "compile_page",     "book_id": "...", "page_id": "..."}
         {"type": "regenerate_block", "book_id": "...", "page_id": "...", "block_id": "...", "params_override": {}}
     """
-    await ws.accept()
+    from deeptutor.auth import require_websocket_user
+
+    if await require_websocket_user(ws) is None:
+        return
     closed = False
 
     async def send(data: dict[str, Any]) -> None:

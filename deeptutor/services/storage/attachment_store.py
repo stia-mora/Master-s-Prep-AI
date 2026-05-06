@@ -108,26 +108,26 @@ class LocalDiskAttachmentStore:
     """
 
     def __init__(self, root: Path | None = None) -> None:
-        if root is None:
-            override = os.environ.get(_ATTACHMENT_DIR_ENV, "").strip()
-            if override:
-                root = Path(override).expanduser().resolve()
-            else:
-                root = (
-                    get_path_service().get_user_root().joinpath(*_DEFAULT_SUBPATH)
-                ).resolve()
-        self._root = root
+        override = os.environ.get(_ATTACHMENT_DIR_ENV, "").strip()
+        if root is not None:
+            self._root_override = root.expanduser().resolve()
+        elif override:
+            self._root_override = Path(override).expanduser().resolve()
+        else:
+            self._root_override = None
 
     @property
     def root(self) -> Path:
-        return self._root
+        if self._root_override is not None:
+            return self._root_override
+        return get_path_service().get_user_root().joinpath(*_DEFAULT_SUBPATH).resolve()
 
     def _stored_filename(self, attachment_id: str, filename: str) -> str:
         return f"{attachment_id}_{_coerce_filename(filename)}"
 
     def _session_dir(self, session_id: str) -> Path:
         sid = _coerce_filename(session_id)
-        return (self._root / sid).resolve()
+        return (self.root / sid).resolve()
 
     def _safe_join(self, session_id: str, name: str) -> Path | None:
         """Join *name* under the session dir and confirm the result stays
@@ -138,7 +138,7 @@ class LocalDiskAttachmentStore:
         # symlink-based attack that would point outside the root once created.
         candidate = (session_dir / name).resolve()
         try:
-            candidate.relative_to(self._root.resolve())
+            candidate.relative_to(self.root.resolve())
         except ValueError:
             return None
         return candidate

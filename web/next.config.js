@@ -5,6 +5,9 @@
 //   2. `git describe --tags` when building from a checkout (local dev)
 //   3. Empty string → frontend treats it as "unknown" and shows the
 //      latest GitHub release as a neutral fallback.
+const RAW_API_BASE = (process.env.NEXT_PUBLIC_API_BASE || "http://localhost:8001").replace(/\/+$/, "");
+const API_PROXY_BASE = RAW_API_BASE.endsWith("/api") ? RAW_API_BASE.slice(0, -4) : RAW_API_BASE;
+
 const APP_VERSION = (() => {
   if (process.env.APP_VERSION) return process.env.APP_VERSION;
   try {
@@ -34,6 +37,17 @@ const nextConfig = {
   devIndicators: {
     position: "bottom-right",
   },
+  async rewrites() {
+    return {
+      beforeFiles: [
+        {
+          source: "/api/v1/ws",
+          destination: `${API_PROXY_BASE}/api/v1/ws`,
+        },
+      ],
+    };
+  },
+
 
   // Transpile mermaid and related packages for proper ESM handling
   transpilePackages: ["mermaid"],

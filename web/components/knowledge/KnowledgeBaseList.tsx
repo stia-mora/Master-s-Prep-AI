@@ -11,6 +11,8 @@ import {
   Star,
 } from "lucide-react";
 import {
+  getKnowledgeBaseDisplayName,
+  getKnowledgeBaseShortName,
   kbHasLiveProgress,
   kbNeedsReindex,
   resolveKbStatus,
@@ -46,7 +48,11 @@ export default function KnowledgeBaseList({
   const filtered = useMemo(() => {
     const q = query.trim().toLowerCase();
     if (!q) return kbs;
-    return kbs.filter((kb) => kb.name.toLowerCase().includes(q));
+    return kbs.filter((kb) =>
+      `${kb.name} ${getKnowledgeBaseDisplayName(kb)} ${getKnowledgeBaseShortName(kb)}`
+        .toLowerCase()
+        .includes(q),
+    );
   }, [kbs, query]);
 
   if (collapsed) {
@@ -190,6 +196,7 @@ function CollapsedKbDot({
   onSelect: () => void;
 }) {
   const status = resolveKbStatus(kb);
+  const displayName = getKnowledgeBaseDisplayName(kb);
   const needsReindex = kbNeedsReindex(kb);
   const isLive = kbHasLiveProgress(kb) || isReindexingLocally;
   const isError = status === "error";
@@ -209,8 +216,8 @@ function CollapsedKbDot({
     <button
       type="button"
       onClick={onSelect}
-      title={kb.name}
-      aria-label={kb.name}
+      title={displayName === kb.name ? kb.name : `${displayName} (${kb.name})`}
+      aria-label={displayName}
       className={`relative flex h-9 w-9 items-center justify-center rounded-lg text-[10px] font-medium transition-colors ${
         selected
           ? "bg-[var(--primary)]/12 text-[var(--foreground)] ring-1 ring-[var(--primary)]/40"
@@ -224,7 +231,7 @@ function CollapsedKbDot({
         <Star className="h-3 w-3 text-amber-500" fill="currentColor" />
       ) : (
         <span className="uppercase tracking-tight">
-          {kb.name.slice(0, 2)}
+          {getKnowledgeBaseShortName(kb).slice(0, 2)}
         </span>
       )}
       <span

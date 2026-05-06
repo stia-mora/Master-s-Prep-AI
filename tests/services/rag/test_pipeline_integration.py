@@ -22,6 +22,7 @@ import asyncio
 import os
 from pathlib import Path
 import shutil
+import sys
 import tempfile
 
 from dotenv import load_dotenv
@@ -52,19 +53,19 @@ def print_header(text: str):
 
 
 def print_success(text: str):
-    print(f"  {Colors.GREEN}✓{Colors.END} {text}")
+    print(f"  {Colors.GREEN}PASS{Colors.END} {text}")
 
 
 def print_warning(text: str):
-    print(f"  {Colors.YELLOW}⚠{Colors.END} {text}")
+    print(f"  {Colors.YELLOW}WARN{Colors.END} {text}")
 
 
 def print_error(text: str):
-    print(f"  {Colors.RED}✗{Colors.END} {text}")
+    print(f"  {Colors.RED}FAIL{Colors.END} {text}")
 
 
 def print_info(text: str):
-    print(f"  {Colors.BLUE}ℹ{Colors.END} {text}")
+    print(f"  {Colors.BLUE}INFO{Colors.END} {text}")
 
 
 class PipelineIntegrationTest:
@@ -110,7 +111,7 @@ class PipelineIntegrationTest:
 
     async def test_initialize(self) -> bool:
         """Test knowledge base initialization"""
-        print("\n  📚 Testing initialization...")
+        print("\n  馃摎 Testing initialization...")
 
         try:
             success = await self.service.initialize(
@@ -145,7 +146,7 @@ class PipelineIntegrationTest:
 
     async def test_search(self) -> bool:
         """Test search/retrieval"""
-        print("\n  🔍 Testing search...")
+        print("\n  馃攳 Testing search...")
 
         # Test query based on test file content
         # testfile.txt contains: "Shandong province has a pancake."
@@ -200,7 +201,7 @@ class PipelineIntegrationTest:
 
     async def test_search_via_rag_tool(self) -> bool:
         """Test search via rag_tool.py (the actual interface used by agents)"""
-        print("\n  🔧 Testing via rag_tool.py...")
+        print("\n  馃敡 Testing via rag_tool.py...")
 
         try:
             from deeptutor.tools.rag_tool import rag_search
@@ -231,7 +232,7 @@ class PipelineIntegrationTest:
 
     async def test_delete(self) -> bool:
         """Test knowledge base deletion"""
-        print("\n  🗑️  Testing deletion...")
+        print("\n  馃棏锔? Testing deletion...")
 
         try:
             success = await self.service.delete(kb_name=self.kb_name)

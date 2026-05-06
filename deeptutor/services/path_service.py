@@ -24,6 +24,9 @@ data/user/
 
 from pathlib import Path
 from typing import Literal, cast
+from urllib.parse import quote
+
+from deeptutor.auth import get_current_user_id
 
 AgentModule = Literal[
     "solve",
@@ -100,18 +103,22 @@ class PathService:
 
     @property
     def user_data_dir(self) -> Path:
-        return self._user_data_dir
+        return self.get_user_root()
 
     def get_user_root(self) -> Path:
+        user_id = get_current_user_id()
+        if user_id:
+            safe = "".join(ch if ch.isalnum() or ch in {"_", "-"} else "_" for ch in user_id)
+            return (self._project_root / "data" / "users" / safe).resolve()
         return self._user_data_dir
 
     def get_chat_history_db(self) -> Path:
-        return self._user_data_dir / "chat_history.db"
+        return (self._project_root / "data" / "user" / "chat_history.db").resolve()
 
     def get_public_outputs_root(self) -> Path:
-        return self._user_data_dir
+        return self.get_user_root()
 
-    def is_public_output_path(self, path: str | Path) -> bool:
+    def resolve_public_output_path(self, path: str | Path) -> Path | None:
         candidate = Path(path)
         if not candidate.is_absolute():
             candidate = (self.get_public_outputs_root() / candidate).resolve()
@@ -122,38 +129,48 @@ class PathService:
         try:
             relative = candidate.relative_to(root)
         except ValueError:
-            return False
+            return None
 
         if not candidate.is_file():
-            return False
+            return None
         if candidate.suffix.lower() in self._PRIVATE_SUFFIXES:
-            return False
+            return None
 
         parts = relative.parts
         if parts[:3] == ("workspace", "co-writer", "audio"):
-            return True
+            return candidate
 
         if (
             len(parts) >= 5
             and parts[:3] == ("workspace", "chat", "deep_solve")
             and "artifacts" in parts[4:]
         ):
-            return True
+            return candidate
 
         if (
             len(parts) >= 5
             and parts[:3] == ("workspace", "chat", "math_animator")
             and "artifacts" in parts[4:]
         ):
-            return True
+            return candidate
 
         if len(parts) >= 5 and parts[:2] == ("workspace", "chat") and "code_runs" in parts[3:]:
-            return True
+            return candidate
 
         if len(parts) >= 4 and parts[:3] == ("workspace", "chat", "_detached_code_execution"):
-            return True
+            return candidate
 
-        return False
+        return None
+
+    def public_output_url_for(self, path: str | Path) -> str | None:
+        candidate = self.resolve_public_output_path(path)
+        if candidate is None:
+            return None
+        relative = candidate.relative_to(self.get_public_outputs_root().resolve())
+        return f"/api/outputs/{quote(relative.as_posix(), safe='/')}"
+
+    def is_public_output_path(self, path: str | Path) -> bool:
+        return self.resolve_public_output_path(path) is not None
 
     def get_workspace_dir(self) -> Path:
         return self._user_data_dir / "workspace"

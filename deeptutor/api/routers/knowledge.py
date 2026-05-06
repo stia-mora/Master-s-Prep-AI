@@ -10,6 +10,7 @@ from datetime import datetime
 import mimetypes
 import os
 from pathlib import Path
+import re
 import traceback
 from uuid import uuid4
 
@@ -29,6 +30,7 @@ from pydantic import BaseModel
 from deeptutor.api.utils.progress_broadcaster import ProgressBroadcaster
 from deeptutor.api.utils.task_id_manager import TaskIDManager
 from deeptutor.api.utils.task_log_stream import capture_task_logs, get_task_stream_manager
+from deeptutor.auth import get_current_user_id
 from deeptutor.knowledge.add_documents import DocumentAdder
 from deeptutor.knowledge.initializer import KnowledgeBaseInitializer
 from deeptutor.knowledge.manager import KnowledgeBaseManager
@@ -66,16 +68,30 @@ def format_bytes_human_readable(size_bytes: int) -> str:
 _kb_base_dir = PROJECT_ROOT / "data" / "knowledge_bases"
 DEFAULT_KB_ALIASES = {"", "default", "current", "selected", "默认", "默认知识库", "当前知识库"}
 
-# Lazy initialization
-kb_manager = None
+# Lazy initialization, scoped by current user when authenticated.
+_kb_managers: dict[str, KnowledgeBaseManager] = {}
+
+
+def _safe_user_id(user_id: str) -> str:
+    return re.sub(r"[^A-Za-z0-9_.-]", "_", user_id)[:80]
+
+
+def _kb_base_for_current_user() -> Path:
+    user_id = get_current_user_id()
+    if user_id:
+        return PROJECT_ROOT / "data" / "users" / _safe_user_id(user_id) / "knowledge_bases"
+    return _kb_base_dir
 
 
 def get_kb_manager():
-    """Get KnowledgeBaseManager instance (lazy init)"""
-    global kb_manager
-    if kb_manager is None:
-        kb_manager = KnowledgeBaseManager(base_dir=str(_kb_base_dir))
-    return kb_manager
+    """Get a KnowledgeBaseManager instance for the current user scope."""
+    base_dir = _kb_base_for_current_user()
+    key = str(base_dir)
+    manager = _kb_managers.get(key)
+    if manager is None:
+        manager = KnowledgeBaseManager(base_dir=key)
+        _kb_managers[key] = manager
+    return manager
 
 
 class KnowledgeBaseInfo(BaseModel):
@@ -1203,7 +1219,10 @@ async def clear_progress(kb_name: str):
 @router.websocket("/{kb_name}/progress/ws")
 async def websocket_progress(websocket: WebSocket, kb_name: str):
     """WebSocket endpoint for real-time progress updates"""
-    await websocket.accept()
+    from deeptutor.auth import require_websocket_user
+
+    if await require_websocket_user(websocket) is None:
+        return
 
     broadcaster = ProgressBroadcaster.get_instance()
 

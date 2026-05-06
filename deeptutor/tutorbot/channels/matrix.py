@@ -1,4 +1,4 @@
-"""Matrix (Element) channel — inbound sync + outbound message/media delivery."""
+"""Matrix (Element) channel 鈥?inbound sync + outbound message/media delivery."""
 
 import asyncio
 import logging
@@ -15,7 +15,6 @@ try:
     from nio import (
         AsyncClient,
         AsyncClientConfig,
-        ContentRepositoryConfigError,
         DownloadError,
         InviteEvent,
         JoinError,
@@ -372,7 +371,7 @@ class MatrixChannel(BaseChannel):
         return None
 
     async def _effective_media_limit_bytes(self) -> int:
-        """min(local config, server advertised) — 0 blocks all uploads."""
+        """min(local config, server advertised) 鈥?0 blocks all uploads."""
         local_limit = max(int(self.config.max_media_bytes), 0)
         server_limit = await self._resolve_server_upload_limit_bytes()
         if server_limit is None:
@@ -489,7 +488,7 @@ class MatrixChannel(BaseChannel):
         self.client.add_response_callback(self._on_send_error, RoomSendError)
 
     def _log_response_error(self, label: str, response: Any) -> None:
-        """Log Matrix response errors — auth errors at ERROR level, rest at WARNING."""
+        """Log Matrix response errors 鈥?auth errors at ERROR level, rest at WARNING."""
         code = getattr(response, "status_code", None)
         is_auth = code in {"M_UNKNOWN_TOKEN", "M_FORBIDDEN", "M_UNAUTHORIZED"}
         is_fatal = is_auth or getattr(response, "soft_logout", False)

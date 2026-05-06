@@ -6,6 +6,7 @@ WebSocket endpoint for real-time problem solving with streaming logs.
 """
 
 import asyncio
+from pathlib import Path
 import re
 from typing import Any
 
@@ -91,7 +92,10 @@ async def delete_solver_session(session_id: str):
 
 @router.websocket("/solve")
 async def websocket_solve(websocket: WebSocket):
-    await websocket.accept()
+    from deeptutor.auth import require_websocket_user
+
+    if await require_websocket_user(websocket) is None:
+        return
 
     task_manager = TaskIDManager.get_instance()
     connection_closed = asyncio.Event()
@@ -315,21 +319,20 @@ async def websocket_solve(websocket: WebSocket):
             if output_dir_str and final_answer:
                 try:
                     output_dir = Path(output_dir_str)
-
                     if not output_dir.is_absolute():
                         output_dir = output_dir.resolve()
 
-                    path_str = str(output_dir).replace("\\", "/")
-                    parts = path_str.split("/")
+                    def replace_artifact_link(match: re.Match[str]) -> str:
+                        artifact_url = path_service.public_output_url_for(
+                            output_dir / "artifacts" / match.group(1)
+                        )
+                        return f"]({artifact_url})" if artifact_url else match.group(0)
 
-                    if "user" in parts:
-                        idx = parts.index("user")
-                        rel_path = "/".join(parts[idx + 1 :])
-                        base_url = f"/api/outputs/{rel_path}"
-
-                        pattern = r"\]\(artifacts/([^)]+)\)"
-                        replacement = rf"]({base_url}/artifacts/\1)"
-                        final_answer = re.sub(pattern, replacement, final_answer)
+                    final_answer = re.sub(
+                        r"\]\(artifacts/([^)]+)\)",
+                        replace_artifact_link,
+                        final_answer,
+                    )
                 except Exception as e:
                     logger.debug(f"Error processing image paths: {e}")
 

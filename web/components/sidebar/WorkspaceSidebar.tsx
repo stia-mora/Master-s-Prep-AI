@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 import { useTranslation } from "react-i18next";
 import { SidebarShell } from "@/components/sidebar/SidebarShell";
+import { useAuth } from "@/context/AuthContext";
 import { useUnifiedChat } from "@/context/UnifiedChatContext";
 import {
   deleteSession,
@@ -15,6 +16,7 @@ import {
 export default function WorkspaceSidebar() {
   const { t } = useTranslation();
   const router = useRouter();
+  const { user, loading: authLoading } = useAuth();
   const {
     newSession,
     selectedSessionId,
@@ -26,6 +28,11 @@ export default function WorkspaceSidebar() {
   const hasLoadedSessionsRef = useRef(false);
 
   const refreshSessions = useCallback(async () => {
+    if (authLoading || !user) {
+      setSessions([]);
+      setLoadingSessions(false);
+      return;
+    }
     if (!hasLoadedSessionsRef.current) {
       setLoadingSessions(true);
     }
@@ -33,11 +40,15 @@ export default function WorkspaceSidebar() {
       setSessions(await listSessions(50, 0, { force: true }));
       hasLoadedSessionsRef.current = true;
     } catch (error) {
+      if (error instanceof Error && error.message.includes("401")) {
+        setSessions([]);
+        return;
+      }
       console.error("Failed to load sessions", error);
     } finally {
       setLoadingSessions(false);
     }
-  }, []);
+  }, [authLoading, user]);
 
   useEffect(() => {
     void refreshSessions();
@@ -53,6 +64,7 @@ export default function WorkspaceSidebar() {
               ...session,
               status: runtime.status,
               active_turn_id: runtime.activeTurnId || session.active_turn_id,
+              current_stage: runtime.currentStage || session.current_stage,
             }
           : session,
       };

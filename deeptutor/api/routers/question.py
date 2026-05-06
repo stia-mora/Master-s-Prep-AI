@@ -58,7 +58,10 @@ async def websocket_mimic_generate(websocket: WebSocket):
         "max_questions": 5  // optional
     }
     """
-    await websocket.accept()
+    from deeptutor.auth import require_websocket_user
+
+    if await require_websocket_user(websocket) is None:
+        return
 
     pusher_task = None
     original_stdout = sys.stdout
@@ -323,7 +326,10 @@ async def websocket_mimic_generate(websocket: WebSocket):
 
 @router.websocket("/generate")
 async def websocket_question_generate(websocket: WebSocket):
-    await websocket.accept()
+    from deeptutor.auth import require_websocket_user
+
+    if await require_websocket_user(websocket) is None:
+        return
 
     # Get task ID manager
     task_manager = TaskIDManager.get_instance()
@@ -486,12 +492,13 @@ async def websocket_question_generate(websocket: WebSocket):
 
             # Log additional context if available
             try:
-                if "result" in locals():
+                context_result = locals().get("result")
+                if context_result is not None:
                     logger.error(
-                        f"Result type: {type(result)}, result keys: {result.keys() if isinstance(result, dict) else 'N/A'}"
+                        f"Result type: {type(context_result)}, result keys: {context_result.keys() if isinstance(context_result, dict) else 'N/A'}"
                     )
-                    if isinstance(result, dict) and "validation" in result:
-                        validation = result["validation"]
+                    if isinstance(context_result, dict) and "validation" in context_result:
+                        validation = context_result["validation"]
                         logger.error(f"Validation type: {type(validation)}")
                         if isinstance(validation, dict):
                             logger.error(f"Validation keys: {validation.keys()}")

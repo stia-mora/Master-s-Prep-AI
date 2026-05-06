@@ -16,9 +16,11 @@ Supported client message ``type`` values:
   brand-new turn. Replaces the trailing assistant message (if any) and
   reuses the session's stored capability/tools/preferences. Optional
   ``overrides`` field accepts ``capability``, ``tools``, ``knowledge_bases``,
-  ``language``, ``config``, ``notebook_references``, ``history_references``.
+  ``language``, ``config``, `
+otebook_references``, ``history_references``.
   Errors: ``regenerate_busy`` (another turn is running) and
-  ``nothing_to_regenerate`` (no prior user message).
+  `
+othing_to_regenerate`` (no prior user message).
 """
 
 from __future__ import annotations
@@ -36,7 +38,11 @@ logger = logging.getLogger(__name__)
 
 @router.websocket("/ws")
 async def unified_websocket(ws: WebSocket) -> None:
-    await ws.accept()
+    from deeptutor.auth import current_user_context, require_websocket_user
+
+    user = await require_websocket_user(ws)
+    if user is None:
+        return
     closed = False
     subscription_tasks: dict[str, asyncio.Task[None]] = {}
 
@@ -68,7 +74,8 @@ async def unified_websocket(ws: WebSocket) -> None:
                 await safe_send(event)
 
         await stop_subscription(turn_id)
-        subscription_tasks[turn_id] = asyncio.create_task(_forward())
+        with current_user_context(user.user_id):
+            subscription_tasks[turn_id] = asyncio.create_task(_forward())
 
     async def subscribe_session(session_id: str, after_seq: int = 0) -> None:
         from deeptutor.services.session import get_turn_runtime_manager
@@ -80,7 +87,8 @@ async def unified_websocket(ws: WebSocket) -> None:
 
         key = f"session:{session_id}"
         await stop_subscription(key)
-        subscription_tasks[key] = asyncio.create_task(_forward())
+        with current_user_context(user.user_id):
+            subscription_tasks[key] = asyncio.create_task(_forward())
 
     try:
         while not closed:
@@ -98,7 +106,9 @@ async def unified_websocket(ws: WebSocket) -> None:
 
                 runtime = get_turn_runtime_manager()
                 try:
-                    _, turn = await runtime.start_turn(msg)
+                    msg["user_id"] = user.user_id
+                    with current_user_context(user.user_id):
+                        _, turn = await runtime.start_turn(msg)
                 except RuntimeError as exc:
                     await safe_send(
                         {
@@ -157,7 +167,8 @@ async def unified_websocket(ws: WebSocket) -> None:
                 from deeptutor.services.session import get_turn_runtime_manager
 
                 runtime = get_turn_runtime_manager()
-                cancelled = await runtime.cancel_turn(turn_id)
+                with current_user_context(user.user_id):
+                    cancelled = await runtime.cancel_turn(turn_id)
                 if not cancelled:
                     await safe_send({"type": "error", "content": f"Turn not found: {turn_id}"})
                 continue
@@ -172,10 +183,14 @@ async def unified_websocket(ws: WebSocket) -> None:
                 runtime = get_turn_runtime_manager()
                 overrides = msg.get("overrides") if isinstance(msg.get("overrides"), dict) else None
                 try:
-                    _, turn = await runtime.regenerate_last_turn(
-                        session_id,
-                        overrides=overrides,
-                    )
+                    if overrides is None:
+                        overrides = {}
+                    overrides["user_id"] = user.user_id
+                    with current_user_context(user.user_id):
+                        _, turn = await runtime.regenerate_last_turn(
+                            session_id,
+                            overrides=overrides,
+                        )
                 except RuntimeError as exc:
                     await safe_send(
                         {

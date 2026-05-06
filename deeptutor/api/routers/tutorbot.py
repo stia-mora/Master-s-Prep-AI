@@ -367,7 +367,10 @@ async def bot_chat_ws(ws: WebSocket, bot_id: str):
     mgr = get_tutorbot_manager()
     instance = mgr.get_bot(bot_id)
 
-    await ws.accept()
+    from deeptutor.auth import require_websocket_user
+
+    if await require_websocket_user(ws) is None:
+        return
 
     if not instance or not instance.running:
         config = mgr.load_bot_config(bot_id)

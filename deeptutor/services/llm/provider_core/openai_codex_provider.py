@@ -3,16 +3,20 @@
 from __future__ import annotations
 
 import asyncio
+from collections.abc import Awaitable, Callable
 import hashlib
 import json
-from collections.abc import Awaitable, Callable
 from typing import Any
 
 import httpx
 from loguru import logger
 
 from deeptutor.services.llm.provider_core.base import LLMProvider, LLMResponse, ToolCallRequest
-from deeptutor.services.llm.provider_core.openai_responses import consume_sse, convert_messages, convert_tools
+from deeptutor.services.llm.provider_core.openai_responses import (
+    consume_sse,
+    convert_messages,
+    convert_tools,
+)
 
 DEFAULT_CODEX_URL = "https://chatgpt.com/backend-api/codex/responses"
 DEFAULT_ORIGINATOR = "DeepTutor"

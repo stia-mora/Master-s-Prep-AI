@@ -6,8 +6,8 @@ Document Validator - Validation utilities for document uploads
 import mimetypes
 import os
 import re
-import unicodedata
 from typing import ClassVar
+import unicodedata
 
 
 class DocumentValidator:

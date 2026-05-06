@@ -2,8 +2,8 @@
 
 from __future__ import annotations
 
-import time
 from collections.abc import Awaitable, Callable
+import time
 from typing import Any
 
 import httpx

@@ -1,4 +1,4 @@
-#!/usr/bin/env python
+﻿#!/usr/bin/env python
 """
 BaseSessionManager - Unified session management base class.
 
@@ -50,6 +50,10 @@ class BaseSessionManager(ABC):
         self.path_service = get_path_service()
         self.sessions_file = self.path_service.get_session_file(module_name)
         self._ensure_file()
+
+    def _current_sessions_file(self):
+        self.sessions_file = self.path_service.get_session_file(self.module_name)
+        return self.sessions_file
 
     # =========================================================================
     # Abstract Methods - Must be implemented by subclasses
@@ -110,9 +114,10 @@ class BaseSessionManager(ABC):
     def _ensure_file(self) -> None:
         """Ensure the sessions file exists with correct format."""
         # Ensure directory exists
-        self.sessions_file.parent.mkdir(parents=True, exist_ok=True)
+        sessions_file = self._current_sessions_file()
+        sessions_file.parent.mkdir(parents=True, exist_ok=True)
 
-        if not self.sessions_file.exists():
+        if not sessions_file.exists():
             initial_data = {
                 "version": "1.0",
                 "sessions": [],
@@ -122,14 +127,16 @@ class BaseSessionManager(ABC):
     def _load_data(self) -> dict[str, Any]:
         """Load sessions data from file."""
         try:
-            with open(self.sessions_file, encoding="utf-8") as f:
+            with open(self._current_sessions_file(), encoding="utf-8") as f:
                 return json.load(f)
         except (json.JSONDecodeError, FileNotFoundError):
             return {"version": "1.0", "sessions": []}
 
     def _save_data(self, data: dict[str, Any]) -> None:
         """Save sessions data to file."""
-        with open(self.sessions_file, "w", encoding="utf-8") as f:
+        sessions_file = self._current_sessions_file()
+        sessions_file.parent.mkdir(parents=True, exist_ok=True)
+        with open(sessions_file, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=2, ensure_ascii=False)
 
     def _get_sessions(self) -> list[dict[str, Any]]:

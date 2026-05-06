@@ -82,6 +82,12 @@ export function apiUrl(path: string): string {
   // Remove leading slash if present to avoid double slashes
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
+  // Browser requests go through the Next.js same-origin proxy so auth cookies
+  // are handled consistently before the proxy forwards to the FastAPI backend.
+  if (typeof window !== "undefined" && normalizedPath.startsWith("/api/")) {
+    return normalizedPath;
+  }
+
   // Remove trailing slash from base URL if present
   const base = resolveBase();
   const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;
@@ -95,14 +101,21 @@ export function apiUrl(path: string): string {
  * @returns WebSocket URL (e.g., 'ws://localhost:8001/api/v1/ws')
  */
 export function wsUrl(path: string): string {
+  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
+
+  // Browser WebSocket requests use the same-origin Next.js rewrite, matching
+  // the REST proxy path so auth cookies stay on one origin during local dev.
+  if (typeof window !== "undefined" && normalizedPath.startsWith("/api/")) {
+    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
+    const host = window.location.host || window.location.hostname;
+    return `${protocol}//${host}${normalizedPath}`;
+  }
+
   // Security Hardening: Convert http to ws and https to wss.
   // In production environments (where API_BASE_URL starts with https), this ensures secure websockets.
   const base = resolveBase()
     .replace(/^http:/, "ws:")
     .replace(/^https:/, "wss:");
-
-  // Remove leading slash if present to avoid double slashes
-  const normalizedPath = path.startsWith("/") ? path : `/${path}`;
 
   // Remove trailing slash from base URL if present
   const normalizedBase = base.endsWith("/") ? base.slice(0, -1) : base;

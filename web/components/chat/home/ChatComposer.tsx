@@ -43,6 +43,7 @@ import type {
   DeepResearchFormConfig,
   ResearchSource,
 } from "@/lib/research-types";
+import { getKnowledgeBaseDisplayName } from "@/lib/knowledge-helpers";
 import { ReferenceChips } from "./ChatMessages";
 import { ComposerInput, type ComposerInputHandle } from "./ComposerInput";
 
@@ -76,6 +77,7 @@ interface PendingAttachment {
 
 interface KnowledgeBase {
   name: string;
+  metadata?: Record<string, unknown> | null;
 }
 
 interface CapabilityDef {
@@ -315,6 +317,12 @@ export default memo(function ChatComposer({
     !isStreaming &&
     !(isResearchMode && Object.keys(researchValidationErrors).length > 0);
 
+  const selectedKnowledgeBase = knowledgeBases.find(
+    (kb) => kb.name === stateKnowledgeBase,
+  );
+  const selectedKnowledgeBaseLabel = selectedKnowledgeBase
+    ? getKnowledgeBaseDisplayName(selectedKnowledgeBase)
+    : stateKnowledgeBase;
   const handleManualSend = useCallback(() => {
     if (!canSend) return;
     const content = inputHandleRef.current?.getValue() || "";
@@ -923,10 +931,10 @@ export default memo(function ChatComposer({
                   disabled={!ragActive}
                   title={
                     ragActive
-                      ? t("Select Knowledge Base")
+                      ? selectedKnowledgeBaseLabel || t("Select Knowledge Base")
                       : t("Enable Knowledge Base source first")
                   }
-                  className={`h-[28px] appearance-none rounded-full border bg-transparent py-0 pl-2.5 pr-5 text-[11px] outline-none transition-colors ${
+                  className={`h-[28px] w-[220px] max-w-[32vw] appearance-none rounded-full border bg-transparent py-0 pl-2.5 pr-5 text-[11px] outline-none transition-colors ${
                     ragActive
                       ? "cursor-pointer border-[var(--border)]/40 text-[var(--muted-foreground)] hover:border-[var(--border)] hover:text-[var(--foreground)]"
                       : "cursor-not-allowed border-transparent text-[var(--border)]"
@@ -942,7 +950,7 @@ export default memo(function ChatComposer({
                   <option value="">{ragActive ? t("No KB") : "—"}</option>
                   {knowledgeBases.map((kb) => (
                     <option key={kb.name} value={kb.name}>
-                      {kb.name}
+                      {getKnowledgeBaseDisplayName(kb)}
                     </option>
                   ))}
                 </select>
