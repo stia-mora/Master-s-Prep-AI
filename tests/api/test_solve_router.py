@@ -10,9 +10,9 @@ pytest.importorskip("fastapi")
 
 FastAPI = pytest.importorskip("fastapi").FastAPI
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
-router = importlib.import_module("deeptutor.api.routers.solve").router
+router = importlib.import_module("master_prep_ai.api.routers.solve").router
 DeepSolveCapability = importlib.import_module(
-    "deeptutor.capabilities.deep_solve"
+    "master_prep_ai.capabilities.deep_solve"
 ).DeepSolveCapability
 
 
@@ -48,17 +48,17 @@ def test_solve_router_uses_explicit_default_tools(monkeypatch, tmp_path) -> None
         async def solve(self, *_args, **_kwargs):
             return {"final_answer": "done", "output_dir": str(tmp_path / "solve"), "metadata": {}}
 
-    monkeypatch.setattr("deeptutor.api.routers.solve.MainSolver", FakeMainSolver)
-    monkeypatch.setattr("deeptutor.api.routers.solve.LogInterceptor", _DummyLogInterceptor)
+    monkeypatch.setattr("master_prep_ai.api.routers.solve.MainSolver", FakeMainSolver)
+    monkeypatch.setattr("master_prep_ai.api.routers.solve.LogInterceptor", _DummyLogInterceptor)
     monkeypatch.setattr(
-        "deeptutor.api.routers.solve.get_llm_config",
+        "master_prep_ai.api.routers.solve.get_llm_config",
         lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
     monkeypatch.setattr(
-        "deeptutor.api.routers.solve.get_path_service",
+        "master_prep_ai.api.routers.solve.get_path_service",
         lambda: SimpleNamespace(get_solve_dir=lambda: Path(tmp_path)),
     )
-    monkeypatch.setattr("deeptutor.api.routers.solve.get_ui_language", lambda default="en": default)
+    monkeypatch.setattr("master_prep_ai.api.routers.solve.get_ui_language", lambda default="en": default)
 
     app = _build_app()
 
@@ -88,17 +88,17 @@ def test_solve_router_respects_disabled_tools(monkeypatch, tmp_path) -> None:
         async def solve(self, *_args, **_kwargs):
             return {"final_answer": "done", "output_dir": str(tmp_path / "solve"), "metadata": {}}
 
-    monkeypatch.setattr("deeptutor.api.routers.solve.MainSolver", FakeMainSolver)
-    monkeypatch.setattr("deeptutor.api.routers.solve.LogInterceptor", _DummyLogInterceptor)
+    monkeypatch.setattr("master_prep_ai.api.routers.solve.MainSolver", FakeMainSolver)
+    monkeypatch.setattr("master_prep_ai.api.routers.solve.LogInterceptor", _DummyLogInterceptor)
     monkeypatch.setattr(
-        "deeptutor.api.routers.solve.get_llm_config",
+        "master_prep_ai.api.routers.solve.get_llm_config",
         lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
     monkeypatch.setattr(
-        "deeptutor.api.routers.solve.get_path_service",
+        "master_prep_ai.api.routers.solve.get_path_service",
         lambda: SimpleNamespace(get_solve_dir=lambda: Path(tmp_path)),
     )
-    monkeypatch.setattr("deeptutor.api.routers.solve.get_ui_language", lambda default="en": default)
+    monkeypatch.setattr("master_prep_ai.api.routers.solve.get_ui_language", lambda default="en": default)
 
     app = _build_app()
 

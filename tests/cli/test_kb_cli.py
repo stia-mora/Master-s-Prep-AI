@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from deeptutor_cli.kb import _collect_documents
+from master_prep_ai_cli.kb import _collect_documents
 
 
 def test_collect_documents_from_directory_matches_uppercase_extensions(tmp_path: Path) -> None:

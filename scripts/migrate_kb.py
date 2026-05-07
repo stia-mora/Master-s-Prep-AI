@@ -3,7 +3,7 @@
 Knowledge Base Migration Script
 ===============================
 
-Migrate existing knowledge bases into DeepTutor's knowledge base system.
+Migrate existing knowledge bases into Master Prep AI's knowledge base system.
 
 Features:
 - Auto-detect index format (llamaindex or legacy rag_storage)
@@ -377,7 +377,7 @@ async def test_kb_search(kb_name: str, query: str = "What is this knowledge base
         True if search succeeded
     """
     try:
-        from deeptutor.tools.rag_tool import rag_search
+        from master_prep_ai.tools.rag_tool import rag_search
     except ImportError as e:
         print(f"  ⚠️  Could not import rag_tool: {e}")
         return False
@@ -416,7 +416,7 @@ async def migrate_kb(
     force: bool = False,
 ) -> bool:
     """
-    Migrate a knowledge base to DeepTutor.
+    Migrate a knowledge base to Master Prep AI.
 
     Args:
         source_path: Path to source knowledge base
@@ -523,7 +523,7 @@ async def migrate_kb(
 
     print("=" * 60)
     print("✓ Migration complete!")
-    print(f"  Knowledge base '{kb_name}' is now available in DeepTutor.")
+    print(f"  Knowledge base '{kb_name}' is now available in Master Prep AI.")
     print("=" * 60)
 
     return True
@@ -536,7 +536,7 @@ async def migrate_kb(
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Migrate knowledge bases into DeepTutor",
+        description="Migrate knowledge bases into Master Prep AI",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

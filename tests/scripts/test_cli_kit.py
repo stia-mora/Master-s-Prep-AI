@@ -24,9 +24,9 @@ def test_log_helpers_do_not_raise_on_legacy_windows_code_page() -> None:
         cli_kit = _load_cli_kit()
 
         assert sys.stdout.errors == "replace"
-        cli_kit.banner("DeepTutor", ["Backend http://localhost:8001"])
-        cli_kit.log_success("DeepTutor started")
-        cli_kit.log_error("DeepTutor failed")
+        cli_kit.banner("Master Prep AI", ["Backend http://localhost:8001"])
+        cli_kit.log_success("Master Prep AI started")
+        cli_kit.log_error("Master Prep AI failed")
         stdout.flush()
 
     assert buffer.getvalue()

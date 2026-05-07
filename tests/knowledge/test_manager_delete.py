@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from deeptutor.knowledge.manager import KnowledgeBaseManager
+from master_prep_ai.knowledge.manager import KnowledgeBaseManager
 
 
 def _create_kb(manager: KnowledgeBaseManager, name: str) -> Path:
@@ -58,7 +58,7 @@ def test_delete_knowledge_base_clears_config_when_rmtree_fails(
 
     monkeypatch.setattr(_shutil, "rmtree", _rmtree_always_errors)
     # The manager imports shutil at module level, so patch there too.
-    from deeptutor.knowledge import manager as manager_mod
+    from master_prep_ai.knowledge import manager as manager_mod
 
     monkeypatch.setattr(manager_mod.shutil, "rmtree", _rmtree_always_errors)
 

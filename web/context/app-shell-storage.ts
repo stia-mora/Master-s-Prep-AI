@@ -2,13 +2,13 @@
 
 export type AppLanguage = "en" | "zh";
 
-export const ACTIVE_SESSION_STORAGE_KEY = "deeptutor.activeSessionId.tab";
-export const LANGUAGE_STORAGE_KEY = "deeptutor-language";
-export const SIDEBAR_COLLAPSED_STORAGE_KEY = "deeptutor.sidebarCollapsed";
+export const ACTIVE_SESSION_STORAGE_KEY = "master_prep_ai.activeSessionId.tab";
+export const LANGUAGE_STORAGE_KEY = "master_prep_ai-language";
+export const SIDEBAR_COLLAPSED_STORAGE_KEY = "master_prep_ai.sidebarCollapsed";
 
-export const ACTIVE_SESSION_EVENT = "deeptutor:active-session";
-export const LANGUAGE_EVENT = "deeptutor:language";
-export const SIDEBAR_COLLAPSED_EVENT = "deeptutor:sidebar-collapsed";
+export const ACTIVE_SESSION_EVENT = "master_prep_ai:active-session";
+export const LANGUAGE_EVENT = "master_prep_ai:language";
+export const SIDEBAR_COLLAPSED_EVENT = "master_prep_ai:sidebar-collapsed";
 
 export function normalizeLanguage(
   value: string | null | undefined,

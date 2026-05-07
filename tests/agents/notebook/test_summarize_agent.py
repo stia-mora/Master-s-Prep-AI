@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor.services.llm.config import LLMConfig
+from master_prep_ai.services.llm.config import LLMConfig
 
 
 def _make_cfg(**overrides):
@@ -24,11 +24,11 @@ def test_summarize_agent_stores_extra_headers(monkeypatch) -> None:
     """Agent should pick up extra_headers from LLMConfig."""
     cfg = _make_cfg(extra_headers={"X-Gateway": "prod"})
     monkeypatch.setattr(
-        "deeptutor.agents.notebook.summarize_agent.get_llm_config",
+        "master_prep_ai.agents.notebook.summarize_agent.get_llm_config",
         lambda: cfg,
     )
 
-    from deeptutor.agents.notebook.summarize_agent import NotebookSummarizeAgent
+    from master_prep_ai.agents.notebook.summarize_agent import NotebookSummarizeAgent
 
     agent = NotebookSummarizeAgent(language="en")
     assert agent.extra_headers == {"X-Gateway": "prod"}
@@ -38,11 +38,11 @@ def test_summarize_agent_empty_extra_headers(monkeypatch) -> None:
     """Agent should default to empty dict when config has no extra_headers."""
     cfg = _make_cfg()
     monkeypatch.setattr(
-        "deeptutor.agents.notebook.summarize_agent.get_llm_config",
+        "master_prep_ai.agents.notebook.summarize_agent.get_llm_config",
         lambda: cfg,
     )
 
-    from deeptutor.agents.notebook.summarize_agent import NotebookSummarizeAgent
+    from master_prep_ai.agents.notebook.summarize_agent import NotebookSummarizeAgent
 
     agent = NotebookSummarizeAgent(language="en")
     assert agent.extra_headers == {}
@@ -53,7 +53,7 @@ async def test_summarize_agent_forwards_extra_headers(monkeypatch) -> None:
     """extra_headers must reach the underlying llm_stream call."""
     cfg = _make_cfg(extra_headers={"X-Gateway": "prod"})
     monkeypatch.setattr(
-        "deeptutor.agents.notebook.summarize_agent.get_llm_config",
+        "master_prep_ai.agents.notebook.summarize_agent.get_llm_config",
         lambda: cfg,
     )
     captured: dict[str, object] = {}
@@ -63,11 +63,11 @@ async def test_summarize_agent_forwards_extra_headers(monkeypatch) -> None:
         yield "summary text"
 
     monkeypatch.setattr(
-        "deeptutor.agents.notebook.summarize_agent.llm_stream",
+        "master_prep_ai.agents.notebook.summarize_agent.llm_stream",
         _fake_llm_stream,
     )
 
-    from deeptutor.agents.notebook.summarize_agent import NotebookSummarizeAgent
+    from master_prep_ai.agents.notebook.summarize_agent import NotebookSummarizeAgent
 
     agent = NotebookSummarizeAgent(language="en")
     chunks: list[str] = []
@@ -88,7 +88,7 @@ async def test_summarize_agent_omits_extra_headers_when_empty(monkeypatch) -> No
     """When no extra_headers configured, they should not appear in kwargs."""
     cfg = _make_cfg()
     monkeypatch.setattr(
-        "deeptutor.agents.notebook.summarize_agent.get_llm_config",
+        "master_prep_ai.agents.notebook.summarize_agent.get_llm_config",
         lambda: cfg,
     )
     captured: dict[str, object] = {}
@@ -98,11 +98,11 @@ async def test_summarize_agent_omits_extra_headers_when_empty(monkeypatch) -> No
         yield "ok"
 
     monkeypatch.setattr(
-        "deeptutor.agents.notebook.summarize_agent.llm_stream",
+        "master_prep_ai.agents.notebook.summarize_agent.llm_stream",
         _fake_llm_stream,
     )
 
-    from deeptutor.agents.notebook.summarize_agent import NotebookSummarizeAgent
+    from master_prep_ai.agents.notebook.summarize_agent import NotebookSummarizeAgent
 
     agent = NotebookSummarizeAgent(language="en")
     async for _ in agent.stream_summary(

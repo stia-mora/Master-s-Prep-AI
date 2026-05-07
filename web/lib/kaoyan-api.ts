@@ -4,6 +4,12 @@ import type {
   DiagnosticResult,
   DiagnosticReport,
   KaoyanChatContext,
+  RagQueryResult,
+  PlanReorderResult,
+  MaterialParseTask,
+  MasteryRecord,
+  ExamSubmitResult,
+  ExamSimulation,
   KaoyanProfile,
   KnowledgeDetail,
   KnowledgeNode,
@@ -54,6 +60,18 @@ export function generatePlan(): Promise<StudyPlan> {
   return request<StudyPlan>("/api/v1/kaoyan/plans/generate", { method: "POST" });
 }
 
+
+export function reorderPlan(input: {
+  trigger_reason?: string;
+  completion_rate?: number;
+  mastery_scores?: Record<string, number>;
+  remaining_days?: number;
+} = {}): Promise<PlanReorderResult> {
+  return request<PlanReorderResult>("/api/v1/kaoyan/plans/reorder", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
 export function getTodayTasks(): Promise<PlanTask[]> {
   return request<PlanTask[]>("/api/v1/kaoyan/tasks/today");
 }
@@ -99,6 +117,7 @@ export function createKaoyanChatContext(input: {
 export function createPracticeSession(input: {
   session_type?: "special" | "wrong_retry" | "similar";
   knowledge_id?: string;
+  source_question_id?: string;
   question_type?: string;
   difficulty_level?: number;
   limit?: number;
@@ -132,6 +151,64 @@ export function submitReview(reviewId: string, status: "reviewed" | "mastered" |
     method: "POST",
     body: JSON.stringify({ status }),
   });
+}
+
+export function createMaterialParseTask(input: { filename: string; content_type?: string }): Promise<MaterialParseTask> {
+  return request<MaterialParseTask>("/api/v1/kaoyan/materials/parse", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function getMaterialParseTask(taskId: string): Promise<MaterialParseTask> {
+  return request<MaterialParseTask>(`/api/v1/kaoyan/materials/tasks/${taskId}`);
+}
+
+export function queryKaoyanRag(input: { kb_name: string; query: string }): Promise<RagQueryResult> {
+  return request<RagQueryResult>("/api/v1/kaoyan/rag/query", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function createExamSimulation(input: {
+  subject?: string;
+  year?: number;
+  module?: string;
+  knowledge_id?: string;
+  question_type?: string;
+  difficulty_level?: number;
+  time_limit_minutes?: number;
+  limit?: number;
+}): Promise<ExamSimulation> {
+  return request<ExamSimulation>("/api/v1/kaoyan/exam/simulation", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function submitExamSimulation(
+  simulationId: string,
+  answers: Array<{ question_id: string; answer: string; image_data_url?: string }>,
+  elapsed_seconds?: number,
+): Promise<ExamSubmitResult> {
+  return request<ExamSubmitResult>(`/api/v1/kaoyan/exam/${simulationId}/submit`, {
+    method: "POST",
+    body: JSON.stringify({ answers, elapsed_seconds }),
+  });
+}
+
+export function getMasteryRecords(input: {
+  knowledge_id?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<{ records: MasteryRecord[]; limit: number; offset: number }> {
+  const params = new URLSearchParams();
+  if (input.knowledge_id) params.set("knowledge_id", input.knowledge_id);
+  if (input.limit) params.set("limit", String(input.limit));
+  if (input.offset) params.set("offset", String(input.offset));
+  const suffix = params.toString() ? `?${params.toString()}` : "";
+  return request<{ records: MasteryRecord[]; limit: number; offset: number }>(`/api/v1/kaoyan/mastery/records${suffix}`);
 }
 export function getDiagnosticReports(limit = 50, offset = 0): Promise<{ reports: DiagnosticReport[] }> {
   return request<{ reports: DiagnosticReport[] }>(`/api/v1/kaoyan/diagnostic/reports?limit=${limit}&offset=${offset}`);

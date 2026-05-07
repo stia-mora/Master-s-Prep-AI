@@ -15,8 +15,8 @@ from pathlib import Path
 
 import pytest
 
-from deeptutor.services.config.env_store import EnvStore, _render_optional_bool
-from deeptutor.services.config.provider_runtime import _coerce_optional_bool
+from master_prep_ai.services.config.env_store import EnvStore, _render_optional_bool
+from master_prep_ai.services.config.provider_runtime import _coerce_optional_bool
 
 
 @pytest.fixture(autouse=True)

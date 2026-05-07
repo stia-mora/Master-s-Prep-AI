@@ -13,11 +13,11 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
-from deeptutor.services.embedding.adapters.base import (
+from master_prep_ai.services.embedding.adapters.base import (
     EmbeddingProviderError,
     EmbeddingRequest,
 )
-from deeptutor.services.embedding.adapters.openai_sdk import (
+from master_prep_ai.services.embedding.adapters.openai_sdk import (
     OpenAISDKEmbeddingAdapter,
 )
 
@@ -92,7 +92,7 @@ def stub_client(monkeypatch: pytest.MonkeyPatch) -> type[_ClientStub]:
     _ClientStub.last_create_kwargs = {}
     _ClientStub.raised = None
     monkeypatch.setattr(
-        "deeptutor.services.embedding.adapters.openai_sdk.AsyncOpenAI",
+        "master_prep_ai.services.embedding.adapters.openai_sdk.AsyncOpenAI",
         _ClientStub,
     )
     return _ClientStub
@@ -166,9 +166,9 @@ async def test_embed_omits_dimensions_for_unknown_model_under_auto(
 
 @pytest.mark.asyncio
 async def test_embed_forwards_extra_headers(stub_client: type[_ClientStub]) -> None:
-    adapter = _make_adapter(extra_headers={"X-App": "deeptutor"})
+    adapter = _make_adapter(extra_headers={"X-App": "master_prep_ai"})
     await adapter.embed(EmbeddingRequest(texts=["x"], model="text-embedding-3-large"))
-    assert stub_client.constructor_kwargs["default_headers"] == {"X-App": "deeptutor"}
+    assert stub_client.constructor_kwargs["default_headers"] == {"X-App": "master_prep_ai"}
 
 
 @pytest.mark.asyncio

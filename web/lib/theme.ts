@@ -5,7 +5,7 @@
 
 export type Theme = "light" | "dark" | "glass" | "snow";
 
-export const THEME_STORAGE_KEY = "deeptutor-theme";
+export const THEME_STORAGE_KEY = "master_prep_ai-theme";
 
 type ThemeChangeListener = (theme: Theme) => void;
 const themeListeners = new Set<ThemeChangeListener>();

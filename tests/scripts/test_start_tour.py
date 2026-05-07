@@ -32,26 +32,26 @@ def _load_start_tour_module():
     ):
         setattr(cli_kit, name, lambda *args, **kwargs: None)
 
-    deeptutor_pkg = types.ModuleType("deeptutor")
-    services_pkg = types.ModuleType("deeptutor.services")
-    config_module = types.ModuleType("deeptutor.services.config")
+    master_prep_ai_pkg = types.ModuleType("master_prep_ai")
+    services_pkg = types.ModuleType("master_prep_ai.services")
+    config_module = types.ModuleType("master_prep_ai.services.config")
     config_module.get_config_test_runner = lambda: None
     config_module.get_env_store = lambda: None
     config_module.get_model_catalog_service = lambda: None
 
     original_modules = {
         "_cli_kit": sys.modules.get("_cli_kit"),
-        "deeptutor": sys.modules.get("deeptutor"),
-        "deeptutor.services": sys.modules.get("deeptutor.services"),
-        "deeptutor.services.config": sys.modules.get("deeptutor.services.config"),
+        "master_prep_ai": sys.modules.get("master_prep_ai"),
+        "master_prep_ai.services": sys.modules.get("master_prep_ai.services"),
+        "master_prep_ai.services.config": sys.modules.get("master_prep_ai.services.config"),
     }
 
     services_pkg.config = config_module
-    deeptutor_pkg.services = services_pkg
+    master_prep_ai_pkg.services = services_pkg
     sys.modules["_cli_kit"] = cli_kit
-    sys.modules["deeptutor"] = deeptutor_pkg
-    sys.modules["deeptutor.services"] = services_pkg
-    sys.modules["deeptutor.services.config"] = config_module
+    sys.modules["master_prep_ai"] = master_prep_ai_pkg
+    sys.modules["master_prep_ai.services"] = services_pkg
+    sys.modules["master_prep_ai.services.config"] = config_module
 
     try:
         spec = importlib.util.spec_from_file_location("start_tour_under_test", module_path)

@@ -21,9 +21,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from deeptutor.core.context import UnifiedContext
-from deeptutor.core.stream import StreamEvent, StreamEventType
-from deeptutor.core.stream_bus import StreamBus
+from master_prep_ai.core.context import UnifiedContext
+from master_prep_ai.core.stream import StreamEvent, StreamEventType
+from master_prep_ai.core.stream_bus import StreamBus
 
 
 async def _drain(bus: StreamBus, task) -> list[StreamEvent]:
@@ -47,7 +47,7 @@ def _fake_llm_config() -> MagicMock:
 
 @pytest.mark.asyncio
 async def test_deep_solve_strips_rag_when_no_knowledge_base() -> None:
-    from deeptutor.capabilities.deep_solve import DeepSolveCapability
+    from master_prep_ai.capabilities.deep_solve import DeepSolveCapability
 
     captured_kwargs: dict[str, Any] = {}
 
@@ -76,11 +76,11 @@ async def test_deep_solve_strips_rag_when_no_knowledge_base() -> None:
 
     with (
         patch(
-            "deeptutor.agents.solve.main_solver.MainSolver",
+            "master_prep_ai.agents.solve.main_solver.MainSolver",
             new=_FakeSolver,
         ),
         patch(
-            "deeptutor.services.llm.config.get_llm_config",
+            "master_prep_ai.services.llm.config.get_llm_config",
             return_value=_fake_llm_config(),
         ),
     ):
@@ -104,7 +104,7 @@ async def test_deep_solve_strips_rag_when_no_knowledge_base() -> None:
 
 @pytest.mark.asyncio
 async def test_deep_solve_keeps_rag_when_knowledge_base_attached() -> None:
-    from deeptutor.capabilities.deep_solve import DeepSolveCapability
+    from master_prep_ai.capabilities.deep_solve import DeepSolveCapability
 
     captured_kwargs: dict[str, Any] = {}
 
@@ -133,11 +133,11 @@ async def test_deep_solve_keeps_rag_when_knowledge_base_attached() -> None:
 
     with (
         patch(
-            "deeptutor.agents.solve.main_solver.MainSolver",
+            "master_prep_ai.agents.solve.main_solver.MainSolver",
             new=_FakeSolver,
         ),
         patch(
-            "deeptutor.services.llm.config.get_llm_config",
+            "master_prep_ai.services.llm.config.get_llm_config",
             return_value=_fake_llm_config(),
         ),
     ):
@@ -155,7 +155,7 @@ async def test_deep_solve_keeps_rag_when_knowledge_base_attached() -> None:
 
 @pytest.mark.asyncio
 async def test_deep_research_drops_kb_source_when_no_knowledge_base() -> None:
-    from deeptutor.capabilities.deep_research import DeepResearchCapability
+    from master_prep_ai.capabilities.deep_research import DeepResearchCapability
 
     captured_config: dict[str, Any] = {}
 
@@ -185,11 +185,11 @@ async def test_deep_research_drops_kb_source_when_no_knowledge_base() -> None:
             new=_fake_outline,
         ),
         patch(
-            "deeptutor.services.llm.config.get_llm_config",
+            "master_prep_ai.services.llm.config.get_llm_config",
             return_value=_fake_llm_config(),
         ),
         patch(
-            "deeptutor.services.config.load_config_with_main",
+            "master_prep_ai.services.config.load_config_with_main",
             return_value={},
         ),
     ):
@@ -214,7 +214,7 @@ async def test_deep_research_drops_kb_source_when_no_knowledge_base() -> None:
 
 @pytest.mark.asyncio
 async def test_deep_research_errors_when_only_kb_source_and_no_knowledge_base() -> None:
-    from deeptutor.capabilities.deep_research import DeepResearchCapability
+    from master_prep_ai.capabilities.deep_research import DeepResearchCapability
 
     capability = DeepResearchCapability()
     bus = StreamBus()
@@ -233,11 +233,11 @@ async def test_deep_research_errors_when_only_kb_source_and_no_knowledge_base() 
 
     with (
         patch(
-            "deeptutor.services.llm.config.get_llm_config",
+            "master_prep_ai.services.llm.config.get_llm_config",
             return_value=_fake_llm_config(),
         ),
         patch(
-            "deeptutor.services.config.load_config_with_main",
+            "master_prep_ai.services.config.load_config_with_main",
             return_value={},
         ),
     ):

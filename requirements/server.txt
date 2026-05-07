@@ -1,5 +1,5 @@
 # ============================================
-# DeepTutor Server — Full Dependencies (CLI + Web)
+# Master Prep AI Server — Full Dependencies (CLI + Web)
 # ============================================
 # Mirrors pyproject.toml `[project.optional-dependencies].server`.
 # Keep in sync with pyproject.toml when adding/updating dependencies.

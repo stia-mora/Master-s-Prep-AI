@@ -1,7 +1,7 @@
 # ============================================
-# DeepTutor Docker Compose Configuration
+# Master Prep AI Docker Compose Configuration
 # ============================================
-# This file provides orchestration for DeepTutor services
+# This file provides orchestration for Master Prep AI services
 #
 # Usage:
 #   Production:  docker compose up -d
@@ -19,9 +19,9 @@
 
 services:
   # ============================================
-  # All-in-One DeepTutor Service
+  # All-in-One Master Prep AI Service
   # ============================================
-  deeptutor:
+  master_prep_ai:
     build:
       context: .
       dockerfile: Dockerfile
@@ -29,7 +29,7 @@ services:
       args:
         # Pass backend port at build time for Next.js static optimization
         - BACKEND_PORT=${BACKEND_PORT:-8001}
-    container_name: deeptutor
+    container_name: master_prep_ai
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-8001}:${BACKEND_PORT:-8001}"
@@ -98,11 +98,11 @@ services:
       start_period: 60s
 
     networks:
-      - deeptutor-network
+      - master_prep_ai-network
 
 # ============================================
 # Networks
 # ============================================
 networks:
-  deeptutor-network:
+  master_prep_ai-network:
     driver: bridge

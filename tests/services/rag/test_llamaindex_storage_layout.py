@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from deeptutor.services.rag.index_versioning import EmbeddingSignature
+from master_prep_ai.services.rag.index_versioning import EmbeddingSignature
 
 
 def _signature() -> EmbeddingSignature:
@@ -23,8 +23,8 @@ async def test_incremental_add_migrates_matching_legacy_index_to_flat_version(
     tmp_path: Path,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    from deeptutor.services.rag.pipelines.llamaindex import storage as storage_module
-    from deeptutor.services.rag.pipelines.llamaindex.pipeline import LlamaIndexPipeline
+    from master_prep_ai.services.rag.pipelines.llamaindex import storage as storage_module
+    from master_prep_ai.services.rag.pipelines.llamaindex.pipeline import LlamaIndexPipeline
 
     sig = _signature()
     kb_dir = tmp_path / "kb"

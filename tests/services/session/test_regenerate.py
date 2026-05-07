@@ -17,9 +17,9 @@ from unittest.mock import patch
 
 import pytest
 
-from deeptutor.core.stream import StreamEvent, StreamEventType
-from deeptutor.services.session.sqlite_store import SQLiteSessionStore
-from deeptutor.services.session.turn_runtime import (
+from master_prep_ai.core.stream import StreamEvent, StreamEventType
+from master_prep_ai.services.session.sqlite_store import SQLiteSessionStore
+from master_prep_ai.services.session.turn_runtime import (
     TurnRuntimeManager,
     _extract_regenerate_flag,
 )
@@ -288,15 +288,15 @@ class TestRegenerateLastTurn:
             refresh_calls.append(kwargs)
 
         monkeypatch.setattr(
-            "deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace()
+            "master_prep_ai.services.llm.config.get_llm_config", lambda: SimpleNamespace()
         )
         monkeypatch.setattr(
-            "deeptutor.services.session.context_builder.ContextBuilder",
+            "master_prep_ai.services.session.context_builder.ContextBuilder",
             FakeContextBuilder,
         )
-        monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
+        monkeypatch.setattr("master_prep_ai.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
         monkeypatch.setattr(
-            "deeptutor.services.memory.get_memory_service",
+            "master_prep_ai.services.memory.get_memory_service",
             lambda: SimpleNamespace(
                 build_memory_context=lambda: "",
                 refresh_from_turn=tracking_refresh,

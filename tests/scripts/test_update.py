@@ -45,7 +45,7 @@ def _commit(repo: Path, message: str) -> None:
 
 def _configure_user(repo: Path) -> None:
     _git(repo, "config", "user.email", "tests@example.com")
-    _git(repo, "config", "user.name", "DeepTutor Tests")
+    _git(repo, "config", "user.name", "Master Prep AI Tests")
 
 
 def _create_checkout(tmp_path: Path, branch: str = "main") -> tuple[Path, Path]:

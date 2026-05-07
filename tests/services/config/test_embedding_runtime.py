@@ -6,8 +6,8 @@ from pathlib import Path
 
 import pytest
 
-from deeptutor.services.config.env_store import EnvStore
-from deeptutor.services.config.provider_runtime import resolve_embedding_runtime_config
+from master_prep_ai.services.config.env_store import EnvStore
+from master_prep_ai.services.config.provider_runtime import resolve_embedding_runtime_config
 
 
 @pytest.fixture(autouse=True)

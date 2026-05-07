@@ -10,15 +10,15 @@ from typing import Any
 
 import pytest
 
-import deeptutor.agents.visualize.pipeline as visualize_pipeline
-from deeptutor.capabilities.chat import ChatCapability
-from deeptutor.capabilities.deep_question import DeepQuestionCapability
-from deeptutor.capabilities.deep_research import DeepResearchCapability
-from deeptutor.capabilities.deep_solve import DeepSolveCapability
-from deeptutor.capabilities.visualize import VisualizeCapability
-from deeptutor.core.context import Attachment, UnifiedContext
-from deeptutor.core.stream import StreamEvent, StreamEventType
-from deeptutor.core.stream_bus import StreamBus
+import master_prep_ai.agents.visualize.pipeline as visualize_pipeline
+from master_prep_ai.capabilities.chat import ChatCapability
+from master_prep_ai.capabilities.deep_question import DeepQuestionCapability
+from master_prep_ai.capabilities.deep_research import DeepResearchCapability
+from master_prep_ai.capabilities.deep_solve import DeepSolveCapability
+from master_prep_ai.capabilities.visualize import VisualizeCapability
+from master_prep_ai.core.context import Attachment, UnifiedContext
+from master_prep_ai.core.stream import StreamEvent, StreamEventType
+from master_prep_ai.core.stream_bus import StreamBus
 
 
 def _install_module(
@@ -93,7 +93,7 @@ async def test_chat_capability_streams_content_and_geogebra_context(
             )
             await stream.content("assistant output", source="chat", stage="responding")
 
-    monkeypatch.setattr("deeptutor.capabilities.chat.AgenticChatPipeline", FakePipeline)
+    monkeypatch.setattr("master_prep_ai.capabilities.chat.AgenticChatPipeline", FakePipeline)
 
     context = UnifiedContext(
         user_message="analyze triangle",
@@ -153,10 +153,10 @@ async def test_deep_solve_capability_bridges_solver_output(
                 "metadata": {"steps": 2},
             }
 
-    _install_module(monkeypatch, "deeptutor.agents.solve.main_solver", MainSolver=FakeMainSolver)
+    _install_module(monkeypatch, "master_prep_ai.agents.solve.main_solver", MainSolver=FakeMainSolver)
     _install_module(
         monkeypatch,
-        "deeptutor.services.llm.config",
+        "master_prep_ai.services.llm.config",
         get_llm_config=lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
 
@@ -233,10 +233,10 @@ async def test_deep_solve_capability_bridges_observation_and_retrieve_events(
                 "metadata": {"steps": 1},
             }
 
-    _install_module(monkeypatch, "deeptutor.agents.solve.main_solver", MainSolver=FakeMainSolver)
+    _install_module(monkeypatch, "master_prep_ai.agents.solve.main_solver", MainSolver=FakeMainSolver)
     _install_module(
         monkeypatch,
-        "deeptutor.services.llm.config",
+        "master_prep_ai.services.llm.config",
         get_llm_config=lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
 
@@ -295,12 +295,12 @@ async def test_deep_question_capability_uses_user_message_as_topic(
 
     _install_module(
         monkeypatch,
-        "deeptutor.agents.question.coordinator",
+        "master_prep_ai.agents.question.coordinator",
         AgentCoordinator=FakeCoordinator,
     )
     _install_module(
         monkeypatch,
-        "deeptutor.services.llm.config",
+        "master_prep_ai.services.llm.config",
         get_llm_config=lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
 
@@ -354,12 +354,12 @@ async def test_deep_question_mimic_uses_extracted_attachment_text_when_pdf_was_s
 
     _install_module(
         monkeypatch,
-        "deeptutor.agents.question.coordinator",
+        "master_prep_ai.agents.question.coordinator",
         AgentCoordinator=FakeCoordinator,
     )
     _install_module(
         monkeypatch,
-        "deeptutor.services.llm.config",
+        "master_prep_ai.services.llm.config",
         get_llm_config=lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
 
@@ -430,17 +430,17 @@ async def test_deep_question_capability_uses_single_call_followup_agent(
 
     _install_module(
         monkeypatch,
-        "deeptutor.agents.question.coordinator",
+        "master_prep_ai.agents.question.coordinator",
         AgentCoordinator=FakeCoordinator,
     )
     _install_module(
         monkeypatch,
-        "deeptutor.agents.question.agents.followup_agent",
+        "master_prep_ai.agents.question.agents.followup_agent",
         FollowupAgent=FakeFollowupAgent,
     )
     _install_module(
         monkeypatch,
-        "deeptutor.services.llm.config",
+        "master_prep_ai.services.llm.config",
         get_llm_config=lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
 
@@ -505,7 +505,7 @@ def test_deep_question_capability_humanizes_question_progress_labels() -> None:
 async def test_deep_research_capability_requires_explicit_config_and_streams_trace(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    import deeptutor.agents.research.request_config  # noqa: F401
+    import master_prep_ai.agents.research.request_config  # noqa: F401
 
     captured: dict[str, Any] = {}
 
@@ -557,17 +557,17 @@ async def test_deep_research_capability_requires_explicit_config_and_streams_tra
 
     _install_module(
         monkeypatch,
-        "deeptutor.agents.research.research_pipeline",
+        "master_prep_ai.agents.research.research_pipeline",
         ResearchPipeline=FakeResearchPipeline,
     )
     _install_module(
         monkeypatch,
-        "deeptutor.services.config",
+        "master_prep_ai.services.config",
         load_config_with_main=fake_load_config_with_main,
     )
     _install_module(
         monkeypatch,
-        "deeptutor.services.llm.config",
+        "master_prep_ai.services.llm.config",
         get_llm_config=lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
 
@@ -670,7 +670,7 @@ async def test_visualize_capability_passes_attachments_to_analysis_agent(
     )
     _install_module(
         monkeypatch,
-        "deeptutor.services.llm.config",
+        "master_prep_ai.services.llm.config",
         get_llm_config=lambda: SimpleNamespace(api_key="k", base_url="u", api_version="v1"),
     )
 

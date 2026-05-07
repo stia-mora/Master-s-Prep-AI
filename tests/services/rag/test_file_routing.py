@@ -6,7 +6,7 @@ from pathlib import Path
 
 import pytest
 
-from deeptutor.services.rag.file_routing import (
+from master_prep_ai.services.rag.file_routing import (
     DocumentType,
     FileTypeRouter,
 )

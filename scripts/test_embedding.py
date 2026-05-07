@@ -27,8 +27,8 @@ load_dotenv(PROJECT_ROOT / ".env", override=False)
 
 
 def _load_embedding_services():
-    from deeptutor.services.embedding.client import get_embedding_client, reset_embedding_client
-    from deeptutor.services.embedding.config import get_embedding_config
+    from master_prep_ai.services.embedding.client import get_embedding_client, reset_embedding_client
+    from master_prep_ai.services.embedding.config import get_embedding_config
 
     return get_embedding_client, reset_embedding_client, get_embedding_config
 

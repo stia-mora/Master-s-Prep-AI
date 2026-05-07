@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import json
 
-from deeptutor.knowledge.manager import KnowledgeBaseManager
-from deeptutor.knowledge.progress_tracker import ProgressStage, ProgressTracker
+from master_prep_ai.knowledge.manager import KnowledgeBaseManager
+from master_prep_ai.knowledge.progress_tracker import ProgressStage, ProgressTracker
 
 
 def test_progress_tracker_persists_snapshot_and_config(tmp_path) -> None:

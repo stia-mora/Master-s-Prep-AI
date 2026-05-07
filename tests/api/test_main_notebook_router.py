@@ -15,9 +15,9 @@ pytest.importorskip("fastapi")
 FastAPI = pytest.importorskip("fastapi").FastAPI
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
 
-notebook_router = importlib.import_module("deeptutor.api.routers.notebook").router
+notebook_router = importlib.import_module("master_prep_ai.api.routers.notebook").router
 
-from deeptutor.services.notebook.service import NotebookManager
+from master_prep_ai.services.notebook.service import NotebookManager
 
 
 def _build_app(manager: NotebookManager) -> FastAPI:
@@ -30,7 +30,7 @@ def _build_app(manager: NotebookManager) -> FastAPI:
 def manager(tmp_path, monkeypatch) -> NotebookManager:
     instance = NotebookManager(base_dir=str(tmp_path / "notebooks"))
     monkeypatch.setattr(
-        "deeptutor.api.routers.notebook.notebook_manager",
+        "master_prep_ai.api.routers.notebook.notebook_manager",
         instance,
     )
     return instance

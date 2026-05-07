@@ -2,8 +2,8 @@ from pathlib import Path
 import unittest
 
 ROOT = Path(__file__).resolve().parents[2]
-PROVIDER_CMD = (ROOT / "deeptutor_cli" / "provider_cmd.py").read_text(encoding="utf-8")
-CLI_README = (ROOT / "deeptutor_cli" / "README.md").read_text(encoding="utf-8")
+PROVIDER_CMD = (ROOT / "master_prep_ai_cli" / "provider_cmd.py").read_text(encoding="utf-8")
+CLI_README = (ROOT / "master_prep_ai_cli" / "README.md").read_text(encoding="utf-8")
 ROOT_README = (ROOT / "README.md").read_text(encoding="utf-8")
 
 
@@ -25,7 +25,7 @@ class ProviderCliDocsContractTest(unittest.TestCase):
             ROOT_README,
         )
         self.assertIn(
-            "deeptutor provider login github-copilot    # 校验现有 GitHub Copilot 认证是否可用",
+            "master_prep_ai provider login github-copilot    # 校验现有 GitHub Copilot 认证是否可用",
             CLI_README,
         )
         self.assertNotIn("OAuth login (`openai-codex`, `github-copilot`)", ROOT_README)

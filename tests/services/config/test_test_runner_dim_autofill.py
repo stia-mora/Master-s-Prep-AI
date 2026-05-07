@@ -21,7 +21,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from deeptutor.services.config.test_runner import ConfigTestRunner, TestRun
+from master_prep_ai.services.config.test_runner import ConfigTestRunner, TestRun
 
 
 def _make_run() -> TestRun:
@@ -60,10 +60,10 @@ async def test_persist_when_catalog_dim_empty() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=0),
         ),
-        patch("deeptutor.services.embedding.client.EmbeddingClient", return_value=fake_client),
+        patch("master_prep_ai.services.embedding.client.EmbeddingClient", return_value=fake_client),
         patch.object(runner, "_persist_embedding_dimension", return_value=catalog) as persist_mock,
     ):
         await runner._test_embedding(run, model, catalog)
@@ -90,10 +90,10 @@ async def test_overwrite_when_catalog_dim_disagrees_unknown_model() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=3072),
         ),
-        patch("deeptutor.services.embedding.client.EmbeddingClient", return_value=fake_client),
+        patch("master_prep_ai.services.embedding.client.EmbeddingClient", return_value=fake_client),
         patch.object(runner, "_persist_embedding_dimension", return_value=catalog) as persist_mock,
     ):
         await runner._test_embedding(run, model, catalog)
@@ -120,10 +120,10 @@ async def test_empty_vector_still_fatal() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=0),
         ),
-        patch("deeptutor.services.embedding.client.EmbeddingClient", return_value=fake_client),
+        patch("master_prep_ai.services.embedding.client.EmbeddingClient", return_value=fake_client),
     ):
         with pytest.raises(ValueError, match="empty vector"):
             await runner._test_embedding(run, model, catalog)
@@ -176,10 +176,10 @@ async def test_capabilities_event_for_known_model() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=0),
         ),
-        patch("deeptutor.services.embedding.client.EmbeddingClient", return_value=fake_client),
+        patch("master_prep_ai.services.embedding.client.EmbeddingClient", return_value=fake_client),
         patch.object(runner, "_persist_embedding_dimension", return_value=catalog),
     ):
         await runner._test_embedding(run, model, catalog)
@@ -221,10 +221,10 @@ async def test_capabilities_event_for_unknown_model() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=0),
         ),
-        patch("deeptutor.services.embedding.client.EmbeddingClient", return_value=fake_client),
+        patch("master_prep_ai.services.embedding.client.EmbeddingClient", return_value=fake_client),
         patch.object(runner, "_persist_embedding_dimension", return_value=catalog),
     ):
         await runner._test_embedding(run, model, catalog)
@@ -259,10 +259,10 @@ async def test_overwrite_matryoshka_variant_with_native_max() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=1024),
         ),
-        patch("deeptutor.services.embedding.client.EmbeddingClient", return_value=fake_client),
+        patch("master_prep_ai.services.embedding.client.EmbeddingClient", return_value=fake_client),
         patch.object(runner, "_persist_embedding_dimension", return_value=catalog) as persist,
     ):
         await runner._test_embedding(run, model, catalog)
@@ -296,10 +296,10 @@ async def test_overwrite_when_dim_out_of_supported_list() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=999),
         ),
-        patch("deeptutor.services.embedding.client.EmbeddingClient", return_value=fake_client),
+        patch("master_prep_ai.services.embedding.client.EmbeddingClient", return_value=fake_client),
         patch.object(runner, "_persist_embedding_dimension", return_value=catalog) as persist,
     ):
         await runner._test_embedding(run, model, catalog)
@@ -338,11 +338,11 @@ async def test_smoke_probe_forces_dim_zero() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=1024),
         ),
         patch(
-            "deeptutor.services.embedding.client.EmbeddingClient",
+            "master_prep_ai.services.embedding.client.EmbeddingClient",
             side_effect=_capture_client,
         ),
         patch.object(runner, "_persist_embedding_dimension", return_value=catalog),
@@ -377,10 +377,10 @@ async def test_capabilities_event_carries_active_dim_source() -> None:
 
     with (
         patch(
-            "deeptutor.services.config.test_runner.resolve_embedding_runtime_config",
+            "master_prep_ai.services.config.test_runner.resolve_embedding_runtime_config",
             return_value=_resolved_stub(dim=0),
         ),
-        patch("deeptutor.services.embedding.client.EmbeddingClient", return_value=fake_client),
+        patch("master_prep_ai.services.embedding.client.EmbeddingClient", return_value=fake_client),
         patch.object(runner, "_persist_embedding_dimension", return_value=catalog),
     ):
         await runner._test_embedding(run, model, catalog)

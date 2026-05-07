@@ -6,8 +6,8 @@ on:
       - main
       - dev
     paths:
-      - "deeptutor/**"
-      - "deeptutor_cli/**"
+      - "master_prep_ai/**"
+      - "master_prep_ai_cli/**"
       - "tests/**"
       - "requirements/**"
       - "requirements.txt"
@@ -20,8 +20,8 @@ on:
       - main
       - dev
     paths:
-      - "deeptutor/**"
-      - "deeptutor_cli/**"
+      - "master_prep_ai/**"
+      - "master_prep_ai_cli/**"
       - "tests/**"
       - "requirements/**"
       - "requirements.txt"
@@ -64,13 +64,13 @@ jobs:
       - name: Check module imports
         run: |
           echo "Testing with Python ${{ matrix.python-version }}"
-          python -c "from deeptutor.runtime.orchestrator import ChatOrchestrator; print('Orchestrator imports OK')"
-          python -c "from deeptutor.runtime.registry.tool_registry import get_tool_registry; print('Tool registry imports OK')"
-          python -c "from deeptutor.runtime.registry.capability_registry import get_capability_registry; print('Capability registry imports OK')"
-          python -c "from deeptutor.services.config.env_store import EnvStore; print('EnvStore imports OK')"
-          python -c "from deeptutor.api.routers.unified_ws import unified_websocket; print('Unified WS imports OK')"
-          python -c "from deeptutor.services.prompt.manager import PromptManager; print('Prompt manager imports OK')"
-          python -c "from deeptutor.logging import get_logger; print('Logging imports OK')"
+          python -c "from master_prep_ai.runtime.orchestrator import ChatOrchestrator; print('Orchestrator imports OK')"
+          python -c "from master_prep_ai.runtime.registry.tool_registry import get_tool_registry; print('Tool registry imports OK')"
+          python -c "from master_prep_ai.runtime.registry.capability_registry import get_capability_registry; print('Capability registry imports OK')"
+          python -c "from master_prep_ai.services.config.env_store import EnvStore; print('EnvStore imports OK')"
+          python -c "from master_prep_ai.api.routers.unified_ws import unified_websocket; print('Unified WS imports OK')"
+          python -c "from master_prep_ai.services.prompt.manager import PromptManager; print('Prompt manager imports OK')"
+          python -c "from master_prep_ai.logging import get_logger; print('Logging imports OK')"
         env:
           PYTHONPATH: ${{ github.workspace }}
 
@@ -104,7 +104,7 @@ jobs:
           pip install pytest pytest-asyncio ruff
 
       - name: Run Ruff
-        run: python -m ruff check deeptutor tests
+        run: python -m ruff check master_prep_ai tests
 
       - name: Create minimal runtime config
         run: |

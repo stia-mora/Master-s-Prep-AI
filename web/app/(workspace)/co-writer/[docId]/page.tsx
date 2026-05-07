@@ -76,9 +76,9 @@ interface KnowledgeBase {
   is_default?: boolean;
 }
 
-const SPLIT_RATIO_KEY = "deeptutor.co_writer.split_ratio";
-const SYNC_SCROLL_KEY = "deeptutor.co_writer.sync_scroll";
-const LOCAL_DRAFT_PREFIX = "deeptutor.co_writer.draft.";
+const SPLIT_RATIO_KEY = "master_prep_ai.co_writer.split_ratio";
+const SYNC_SCROLL_KEY = "master_prep_ai.co_writer.sync_scroll";
+const LOCAL_DRAFT_PREFIX = "master_prep_ai.co_writer.draft.";
 const AUTOSAVE_DEBOUNCE_MS = 1500;
 const MIN_PANEL_RATIO = 0.18;
 const MAX_PANEL_RATIO = 0.82;

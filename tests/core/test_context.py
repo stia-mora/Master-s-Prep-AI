@@ -2,18 +2,18 @@
 
 from __future__ import annotations
 
-from deeptutor.core.context import Attachment, UnifiedContext
-from deeptutor.core.errors import (
+from master_prep_ai.core.context import Attachment, UnifiedContext
+from master_prep_ai.core.errors import (
     ConfigurationError,
-    DeepTutorError,
+    MasterPrepAIError,
     EnvironmentConfigError,
     LLMContextError,
     LLMServiceError,
     ServiceError,
     ValidationError,
 )
-from deeptutor.core.stream import StreamEvent, StreamEventType
-from deeptutor.core.trace import (
+from master_prep_ai.core.stream import StreamEvent, StreamEventType
+from master_prep_ai.core.trace import (
     build_trace_metadata,
     derive_trace_metadata,
     merge_trace_metadata,
@@ -147,18 +147,18 @@ class TestStreamEvent:
 
 class TestErrors:
     def test_base_error_str_without_details(self) -> None:
-        err = DeepTutorError("boom")
+        err = MasterPrepAIError("boom")
         assert str(err) == "boom"
         assert err.details == {}
 
     def test_base_error_str_with_details(self) -> None:
-        err = DeepTutorError("boom", details={"key": "val"})
+        err = MasterPrepAIError("boom", details={"key": "val"})
         assert "key" in str(err)
 
     def test_hierarchy(self) -> None:
-        assert issubclass(ConfigurationError, DeepTutorError)
-        assert issubclass(ValidationError, DeepTutorError)
-        assert issubclass(ServiceError, DeepTutorError)
+        assert issubclass(ConfigurationError, MasterPrepAIError)
+        assert issubclass(ValidationError, MasterPrepAIError)
+        assert issubclass(ServiceError, MasterPrepAIError)
         assert issubclass(LLMServiceError, ServiceError)
         assert issubclass(LLMContextError, LLMServiceError)
         assert issubclass(EnvironmentConfigError, ConfigurationError)

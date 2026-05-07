@@ -46,7 +46,7 @@ function auditFile(content) {
     if (text.includes(">/i") || text.includes("katex")) continue;
     // Common non-translatable tokens / file extensions / escapes
     if (text === ".md" || text === ".pdf" || text === "\\n") continue;
-    if (text === "DeepTutor") continue;
+    if (text === "Master Prep AI") continue;
     // Ignore obvious already-i18n'd inline markers
     if (text.includes('t("') || text.includes("t('")) continue;
     if (!hasUiText(text)) continue;

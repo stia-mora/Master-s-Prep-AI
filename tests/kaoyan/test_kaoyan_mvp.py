@@ -1,4 +1,4 @@
-﻿from __future__ import annotations
+from __future__ import annotations
 
 import asyncio
 from pathlib import Path
@@ -7,13 +7,13 @@ import uuid
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from deeptutor.api.routers import kaoyan as kaoyan_router
-from deeptutor.auth import AuthUser
-from deeptutor.kaoyan.content_store import KaoyanContentStore
-from deeptutor.kaoyan.learning_store import KaoyanLearningStore
-from deeptutor.kaoyan.practice import KaoyanPracticeService
+from master_prep_ai.api.routers import kaoyan as kaoyan_router
+from master_prep_ai.auth import AuthUser
+from master_prep_ai.kaoyan.content_store import KaoyanContentStore, default_content_db_path
+from master_prep_ai.kaoyan.learning_store import KaoyanLearningStore
+from master_prep_ai.kaoyan.practice import KaoyanPracticeService
 
-CONTENT_DB = r"E:\Group-projects\Master's Prep AI\DeepTutor\math_content.sqlite"
+CONTENT_DB = default_content_db_path()
 
 
 def test_content_store_reads_high_math_package() -> None:
@@ -67,7 +67,7 @@ def test_kaoyan_api_loop_uses_fallback_when_ai_fails(monkeypatch) -> None:
     monkeypatch.setattr(kaoyan_router, "get_content_store", lambda: content)
     monkeypatch.setattr(kaoyan_router, "get_learning_store", lambda: learning)
 
-    from deeptutor.kaoyan import ai_service
+    from master_prep_ai.kaoyan import ai_service
 
     async def fail_complete(*args, **kwargs):
         raise RuntimeError("no model in test")
@@ -121,3 +121,108 @@ def test_kaoyan_api_loop_uses_fallback_when_ai_fails(monkeypatch) -> None:
     assert client.get("/api/v1/kaoyan/wrong-questions").json()
     assert client.get("/api/v1/kaoyan/reviews/today").json()
     assert client.get("/api/v1/kaoyan/dashboard/summary").json()["wrong_count"] == 1
+
+def test_kaoyan_feedback_interfaces(monkeypatch) -> None:
+    content = KaoyanContentStore(CONTENT_DB)
+    learning = KaoyanLearningStore(_runtime_db("feedback_interfaces"))
+
+    monkeypatch.setattr(kaoyan_router, "get_content_store", lambda: content)
+    monkeypatch.setattr(kaoyan_router, "get_learning_store", lambda: learning)
+
+    from master_prep_ai.kaoyan import ai_service
+
+    async def fail_complete(*args, **kwargs):
+        raise RuntimeError("no model in test")
+
+    monkeypatch.setattr(ai_service, "call_llm_complete", fail_complete)
+
+    app = FastAPI()
+    app.dependency_overrides[kaoyan_router.require_current_user] = lambda: AuthUser(
+        user_id="feedback-user", email="feedback@example.com", display_name="Feedback", role="student"
+    )
+    app.include_router(kaoyan_router.router, prefix="/api/v1/kaoyan")
+    client = TestClient(app)
+
+    profile = client.post(
+        "/api/v1/kaoyan/profile/init",
+        json={
+            "target_school": "Test University",
+            "target_major": "CS",
+            "exam_date": "2026-12-20",
+            "daily_minutes": 120,
+            "target_score": 120,
+            "baseline_level": "basic",
+            "weak_modules": ["limit"],
+        },
+    )
+    assert profile.status_code == 200
+
+    plan = client.post("/api/v1/kaoyan/plans/generate")
+    assert plan.status_code == 200
+    assert plan.json()["tasks"]
+
+    reorder = client.post(
+        "/api/v1/kaoyan/plans/reorder",
+        json={"trigger_reason": "test", "completion_rate": 0.2, "mastery_scores": {}, "remaining_days": 20},
+    )
+    assert reorder.status_code == 200
+    assert reorder.json()["new_task_order"]
+
+    material = client.post("/api/v1/kaoyan/materials/parse", json={"filename": "test.pdf", "content_type": "pdf"})
+    assert material.status_code == 200
+    task = client.get(f"/api/v1/kaoyan/materials/tasks/{material.json()['task_id']}")
+    assert task.status_code == 200
+    assert task.json()["status"] == "completed"
+
+    rag = client.post("/api/v1/kaoyan/rag/query", json={"kb_name": "dummy_kb", "query": "test query"})
+    assert rag.status_code == 200
+    assert "results" in rag.json()
+
+    practice = client.post(
+        "/api/v1/kaoyan/practice/session",
+        json={"knowledge_id": "MATH_GS_CH_01_SEC_01", "limit": 1},
+    )
+    assert practice.status_code == 200
+    session = practice.json()
+
+    submitted = client.post(
+        f"/api/v1/kaoyan/practice/{session['session_id']}/submit",
+        json={"answers": [{"question_id": session["questions"][0]["question_id"], "answer": "wrong"}]},
+    )
+    assert submitted.status_code == 200
+    assert submitted.json()["wrong_question_ids"]
+
+    similar = client.post(
+        "/api/v1/kaoyan/practice/session",
+        json={"session_type": "similar", "source_question_id": session["questions"][0]["question_id"], "limit": 1},
+    )
+    assert similar.status_code == 200
+    assert similar.json()["questions"]
+
+    reviews = client.get("/api/v1/kaoyan/reviews/today").json()
+    assert reviews
+    review = client.post(f"/api/v1/kaoyan/reviews/{reviews[0]['review_id']}/submit", json={"status": "mastered"})
+    assert review.status_code == 200
+
+    mastery = client.get("/api/v1/kaoyan/mastery/records")
+    assert mastery.status_code == 200
+    assert mastery.json()["records"]
+
+    exam = client.post(
+        "/api/v1/kaoyan/exam/simulation",
+        json={"knowledge_id": "MATH_GS_CH_01_SEC_01", "limit": 1, "time_limit_minutes": 10},
+    )
+    assert exam.status_code == 200
+    simulation = exam.json()
+    assert simulation["simulation_id"]
+    assert simulation["practice_session"]["questions"]
+
+    exam_submit = client.post(
+        f"/api/v1/kaoyan/exam/{simulation['simulation_id']}/submit",
+        json={
+            "elapsed_seconds": 120,
+            "answers": [{"question_id": simulation["practice_session"]["questions"][0]["question_id"], "answer": "wrong"}],
+        },
+    )
+    assert exam_submit.status_code == 200
+    assert "score_report" in exam_submit.json()

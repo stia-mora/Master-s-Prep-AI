@@ -12,11 +12,11 @@ from typing import Any
 import httpx
 import pytest
 
-from deeptutor.services.embedding.adapters.base import EmbeddingRequest
-from deeptutor.services.embedding.adapters.cohere import CohereEmbeddingAdapter
-from deeptutor.services.embedding.adapters.jina import JinaEmbeddingAdapter
-from deeptutor.services.embedding.adapters.ollama import OllamaEmbeddingAdapter
-from deeptutor.services.embedding.adapters.openai_compatible import (
+from master_prep_ai.services.embedding.adapters.base import EmbeddingRequest
+from master_prep_ai.services.embedding.adapters.cohere import CohereEmbeddingAdapter
+from master_prep_ai.services.embedding.adapters.jina import JinaEmbeddingAdapter
+from master_prep_ai.services.embedding.adapters.ollama import OllamaEmbeddingAdapter
+from master_prep_ai.services.embedding.adapters.openai_compatible import (
     OpenAICompatibleEmbeddingAdapter,
 )
 

@@ -9,7 +9,7 @@
  *     drawer routes to ``TextPreview`` and renders inside ``RichCodeBlock``);
  *   - shows the corresponding language label in the drawer header;
  *   - assumes the backend has been taught to accept the extension via
- *     ``FileTypeRouter.TEXT_EXTENSIONS`` (deeptutor/services/rag/file_routing.py)
+ *     ``FileTypeRouter.TEXT_EXTENSIONS`` (master_prep_ai/services/rag/file_routing.py)
  *     and the frontend's ``TEXT_LIKE_EXTS`` (web/lib/doc-attachments.ts).
  *
  * Adding a new language is a one-line edit here. Adding a brand-new file

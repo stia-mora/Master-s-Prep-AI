@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from deeptutor.knowledge.add_documents import DocumentAdder
-from deeptutor.knowledge.initializer import KnowledgeBaseInitializer
+from master_prep_ai.knowledge.add_documents import DocumentAdder
+from master_prep_ai.knowledge.initializer import KnowledgeBaseInitializer
 
 
 def test_initializer_creates_raw_only_source_layout(tmp_path: Path) -> None:

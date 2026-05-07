@@ -4,8 +4,8 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from deeptutor.services.config.env_store import EnvStore
-from deeptutor.services.config.provider_runtime import (
+from master_prep_ai.services.config.env_store import EnvStore
+from master_prep_ai.services.config.provider_runtime import (
     resolve_llm_runtime_config,
     resolve_search_runtime_config,
 )

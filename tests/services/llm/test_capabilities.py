@@ -1,6 +1,6 @@
 """Tests for LLM capability helpers."""
 
-from deeptutor.services.llm.capabilities import (
+from master_prep_ai.services.llm.capabilities import (
     get_capability,
     get_effective_temperature,
     has_thinking_tags,

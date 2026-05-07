@@ -29,16 +29,16 @@ function shouldPatchCredentials(input: RequestInfo | URL): boolean {
 
 function patchFetchCredentials() {
   if (typeof window === "undefined") return;
-  const marker = "__deeptutorAuthFetchPatched";
-  const win = window as typeof window & { [marker]?: boolean; __deeptutorOriginalFetch?: typeof fetch };
+  const marker = "__master_prep_aiAuthFetchPatched";
+  const win = window as typeof window & { [marker]?: boolean; __master_prep_aiOriginalFetch?: typeof fetch };
   if (win[marker]) return;
   win[marker] = true;
-  win.__deeptutorOriginalFetch = window.fetch.bind(window);
+  win.__master_prep_aiOriginalFetch = window.fetch.bind(window);
   window.fetch = ((input: RequestInfo | URL, init?: RequestInit) => {
     if (shouldPatchCredentials(input)) {
-      return win.__deeptutorOriginalFetch!(input, { ...init, credentials: init?.credentials || "include" });
+      return win.__master_prep_aiOriginalFetch!(input, { ...init, credentials: init?.credentials || "include" });
     }
-    return win.__deeptutorOriginalFetch!(input, init);
+    return win.__master_prep_aiOriginalFetch!(input, init);
   }) as typeof fetch;
 }
 

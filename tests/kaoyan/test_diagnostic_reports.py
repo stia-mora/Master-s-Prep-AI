@@ -3,7 +3,7 @@
 from pathlib import Path
 import uuid
 
-from deeptutor.kaoyan.learning_store import KaoyanLearningStore
+from master_prep_ai.kaoyan.learning_store import KaoyanLearningStore
 
 
 def _runtime_db(name: str) -> Path:

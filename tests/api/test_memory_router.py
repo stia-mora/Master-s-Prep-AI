@@ -8,7 +8,7 @@ pytest.importorskip("fastapi")
 
 FastAPI = pytest.importorskip("fastapi").FastAPI
 TestClient = pytest.importorskip("fastapi.testclient").TestClient
-router = importlib.import_module("deeptutor.api.routers.memory").router
+router = importlib.import_module("master_prep_ai.api.routers.memory").router
 
 
 def _build_app() -> FastAPI:
@@ -44,7 +44,7 @@ def test_memory_router_returns_single_document(monkeypatch) -> None:
             )
 
     monkeypatch.setattr(
-        "deeptutor.api.routers.memory.get_memory_service", lambda: FakeMemoryService()
+        "master_prep_ai.api.routers.memory.get_memory_service", lambda: FakeMemoryService()
     )
 
     with TestClient(_build_app()) as client:
@@ -80,10 +80,10 @@ def test_memory_router_refreshes_from_session(monkeypatch) -> None:
             return _snapshot
 
     monkeypatch.setattr(
-        "deeptutor.api.routers.memory.get_sqlite_session_store", lambda: FakeStore()
+        "master_prep_ai.api.routers.memory.get_sqlite_session_store", lambda: FakeStore()
     )
     monkeypatch.setattr(
-        "deeptutor.api.routers.memory.get_memory_service", lambda: FakeMemoryService()
+        "master_prep_ai.api.routers.memory.get_memory_service", lambda: FakeMemoryService()
     )
 
     with TestClient(_build_app()) as client:
@@ -108,7 +108,7 @@ def test_memory_router_updates_document(monkeypatch) -> None:
             )
 
     monkeypatch.setattr(
-        "deeptutor.api.routers.memory.get_memory_service", lambda: FakeMemoryService()
+        "master_prep_ai.api.routers.memory.get_memory_service", lambda: FakeMemoryService()
     )
 
     with TestClient(_build_app()) as client:

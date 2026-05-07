@@ -1,5 +1,5 @@
 # ============================================
-# DeepTutor Development Dependencies
+# Master Prep AI Development Dependencies
 # ============================================
 # Mirrors pyproject.toml `[project.optional-dependencies].dev`.
 # Keep in sync with pyproject.toml when adding/updating dependencies.

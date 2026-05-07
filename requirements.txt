@@ -1,5 +1,5 @@
 # ============================================
-# DeepTutor Python Dependencies (Runtime Bundle)
+# Master Prep AI Python Dependencies (Runtime Bundle)
 # ============================================
 # Python >= 3.11 required
 #

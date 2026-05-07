@@ -1,4 +1,4 @@
-# Python project configuration for DeepTutor
+# Python project configuration for Master Prep AI
 # This file configures Black, Ruff, and other Python tools
 
 [build-system]
@@ -6,7 +6,7 @@ requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
 
 [project]
-name = "deeptutor"
+name = "master-prep-ai"
 version = "1.0.0"
 description = "An agent-native intelligent learning companion with multi-agent collaboration and RAG"
 requires-python = ">=3.11"
@@ -33,7 +33,7 @@ dependencies = [
 ]
 
 [project.scripts]
-deeptutor = "deeptutor_cli.main:main"
+master-prep-ai = "master_prep_ai_cli.main:main"
 
 [project.optional-dependencies]
 # Full CLI: RAG (LlamaIndex), document parsing, and LLM provider SDKs.
@@ -60,7 +60,7 @@ cli = [
 # loguru / json-repair live here (not in [tutorbot]) because provider_core
 # imports them unconditionally — needed by every server install path.
 server = [
-    "deeptutor[cli]",
+    "master-prep-ai[cli]",
     "fastapi>=0.100.0",
     "uvicorn[standard]>=0.24.0",
     "websockets>=12.0",
@@ -71,7 +71,7 @@ server = [
 
 # TutorBot agent engine + channel SDKs. Mirrors requirements/tutorbot.txt.
 tutorbot = [
-    "deeptutor[server]",
+    "master-prep-ai[server]",
     "croniter>=6.0.0,<7.0.0",
     "tiktoken>=0.12.0,<1.0.0",
     "chardet>=3.0.2,<6.0.0",
@@ -104,7 +104,7 @@ math-animator = ["manim>=0.19.0"]
 
 # Dev/test tooling. Mirrors requirements/dev.txt.
 dev = [
-    "deeptutor[server]",
+    "master-prep-ai[server]",
     "pytest>=7.0.0",
     "pytest-asyncio>=0.23.0",
     "pre-commit>=3.0.0",
@@ -115,10 +115,10 @@ dev = [
 
 # Everything: server + tutorbot + matrix + math-animator + dev tools.
 all = [
-    "deeptutor[tutorbot]",
-    "deeptutor[matrix]",
-    "deeptutor[math-animator]",
-    "deeptutor[dev]",
+    "master-prep-ai[tutorbot]",
+    "master-prep-ai[matrix]",
+    "master-prep-ai[math-animator]",
+    "master-prep-ai[dev]",
 ]
 
 [tool.setuptools]
@@ -126,7 +126,7 @@ include-package-data = true
 
 [tool.setuptools.packages.find]
 where = ["."]
-include = ["deeptutor*", "deeptutor_cli*"]
+include = ["master_prep_ai*", "master_prep_ai_cli*"]
 
 # ============================================
 # Black code formatter configuration
@@ -256,7 +256,7 @@ line-ending = "auto"
 # Ruff import sorting (isort replacement)
 # ============================================
 [tool.ruff.lint.isort]
-known-first-party = ["deeptutor", "deeptutor_cli", "scripts"]
+known-first-party = ["master_prep_ai", "master_prep_ai_cli", "scripts"]
 force-sort-within-sections = true
 split-on-trailing-comma = true
 
@@ -317,7 +317,7 @@ module = "tests.*"
 ignore_errors = true
 
 [[tool.mypy.overrides]]
-module = "deeptutor.tools.*"
+module = "master_prep_ai.tools.*"
 ignore_errors = true  # Some tools may have dynamic imports
 
 # ============================================

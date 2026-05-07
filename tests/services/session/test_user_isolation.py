@@ -4,8 +4,8 @@ import asyncio
 from pathlib import Path
 import uuid
 
-from deeptutor.auth import current_user_context
-from deeptutor.services.session.sqlite_store import SQLiteSessionStore
+from master_prep_ai.auth import current_user_context
+from master_prep_ai.services.session.sqlite_store import SQLiteSessionStore
 
 
 def _runtime_db(name: str) -> Path:
@@ -35,7 +35,7 @@ def test_chat_sessions_are_filtered_by_current_user():
         assert [item["id"] for item in asyncio.run(store.list_sessions())] == [session_a["id"]]
 
 def test_question_notebook_entries_and_categories_are_user_scoped():
-    from deeptutor.services.session.turn_runtime import _build_question_bank_context
+    from master_prep_ai.services.session.turn_runtime import _build_question_bank_context
 
     store = SQLiteSessionStore(_runtime_db("question_bank"))
 
@@ -96,8 +96,8 @@ def test_question_notebook_entries_and_categories_are_user_scoped():
 
 
 def test_attachment_store_default_root_tracks_current_user(monkeypatch):
-    from deeptutor.services.path_service import PathService
-    from deeptutor.services.storage.attachment_store import LocalDiskAttachmentStore
+    from master_prep_ai.services.path_service import PathService
+    from master_prep_ai.services.storage.attachment_store import LocalDiskAttachmentStore
 
     root = Path("tests") / "session_runtime" / f"attachments_{uuid.uuid4().hex}"
     root.mkdir(parents=True, exist_ok=True)

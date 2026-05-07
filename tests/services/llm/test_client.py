@@ -5,8 +5,8 @@ from __future__ import annotations
 from _pytest.monkeypatch import MonkeyPatch
 import pytest
 
-from deeptutor.services.llm.client import LLMClient
-from deeptutor.services.llm.config import LLMConfig
+from master_prep_ai.services.llm.client import LLMClient
+from master_prep_ai.services.llm.config import LLMConfig
 
 
 @pytest.mark.asyncio
@@ -18,7 +18,7 @@ async def test_client_complete_uses_factory(monkeypatch: MonkeyPatch) -> None:
     async def _fake_complete(**_kwargs: object) -> str:
         return "ok"
 
-    monkeypatch.setattr("deeptutor.services.llm.factory.complete", _fake_complete)
+    monkeypatch.setattr("master_prep_ai.services.llm.factory.complete", _fake_complete)
 
     result = await client.complete("hello")
 
@@ -65,7 +65,7 @@ async def test_client_get_model_func_uses_factory(monkeypatch: MonkeyPatch) -> N
         captured.update(kwargs)
         return "ok"
 
-    monkeypatch.setattr("deeptutor.services.llm.factory.complete", _fake_complete)
+    monkeypatch.setattr("master_prep_ai.services.llm.factory.complete", _fake_complete)
 
     func = client.get_model_func()
     result = await func(
@@ -92,7 +92,7 @@ async def test_client_get_vision_model_func_uses_factory(monkeypatch: MonkeyPatc
         captured.update(kwargs)
         return "ok"
 
-    monkeypatch.setattr("deeptutor.services.llm.factory.complete", _fake_complete)
+    monkeypatch.setattr("master_prep_ai.services.llm.factory.complete", _fake_complete)
 
     func = client.get_vision_model_func()
     result = await func(

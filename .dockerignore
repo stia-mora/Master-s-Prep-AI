@@ -1,5 +1,5 @@
 # ============================================
-# DeepTutor Docker Ignore File
+# Master Prep AI Docker Ignore File
 # ============================================
 # Excludes files and directories from the Docker build context
 # to improve build speed and reduce image size
@@ -58,7 +58,7 @@ ENV/
 .venv/
 env.bak/
 venv.bak/
-DeepTutor.env
+Master Prep AI.env
 
 # Pytest cache
 .pytest_cache/

@@ -2,7 +2,7 @@
 
 import pytest
 
-from deeptutor.services.llm.utils import (
+from master_prep_ai.services.llm.utils import (
     build_auth_headers,
     build_chat_url,
     build_completion_url,

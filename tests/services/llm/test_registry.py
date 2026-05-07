@@ -1,6 +1,6 @@
 """Tests for provider registry utilities."""
 
-from deeptutor.services.llm import registry
+from master_prep_ai.services.llm import registry
 
 
 def test_registry_register_and_lookup() -> None:

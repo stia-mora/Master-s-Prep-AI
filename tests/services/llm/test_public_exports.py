@@ -1,4 +1,4 @@
-from deeptutor.services import llm
+from master_prep_ai.services import llm
 
 
 def test_llm_module_exports_cache_helpers():

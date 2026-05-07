@@ -2,7 +2,7 @@
  * Helpers for drag-and-drop document attachments in the chat composer.
  *
  * The accepted extension / MIME sets MUST stay in sync with the backend
- * `deeptutor/utils/document_extractor.py` (which in turn mirrors the KB
+ * `master_prep_ai/utils/document_extractor.py` (which in turn mirrors the KB
  * pipeline's `FileTypeRouter.TEXT_EXTENSIONS`). If you add a new format
  * server-side, add it here too.
  */

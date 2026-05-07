@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor_cli.common import parse_json_object
+from master_prep_ai_cli.common import parse_json_object
 
 
 def test_parse_json_object_whitespace_is_empty_dict() -> None:

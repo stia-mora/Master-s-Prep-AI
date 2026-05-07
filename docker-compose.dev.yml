@@ -1,5 +1,5 @@
 # ============================================
-# DeepTutor Docker Compose - Development Override
+# Master Prep AI Docker Compose - Development Override
 # ============================================
 # Use with: docker compose -f docker-compose.yml -f docker-compose.dev.yml up
 #
@@ -10,14 +10,14 @@
 # ============================================
 
 services:
-  deeptutor:
+  master_prep_ai:
     build:
       target: development
 
     volumes:
       # Mount backend source code for hot-reload
-      - ./deeptutor:/app/deeptutor:ro
-      - ./deeptutor_cli:/app/deeptutor_cli:ro
+      - ./master_prep_ai:/app/master_prep_ai:ro
+      - ./master_prep_ai_cli:/app/master_prep_ai_cli:ro
       - ./scripts:/app/scripts:ro
 
       # Mount frontend source for hot-reload
@@ -48,4 +48,4 @@ services:
     #     max-file: "3"
 
     networks:
-      - deeptutor-network
+      - master_prep_ai-network

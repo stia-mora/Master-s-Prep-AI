@@ -7,8 +7,8 @@ import uuid
 
 from fastapi.testclient import TestClient
 
-from deeptutor.api import main as api_main
-from deeptutor.auth import COOKIE_NAME, get_auth_store, reset_auth_store_cache
+from master_prep_ai.api import main as api_main
+from master_prep_ai.auth import COOKIE_NAME, get_auth_store, reset_auth_store_cache
 
 
 def _runtime_root() -> Path:
@@ -26,7 +26,7 @@ def _set_runtime_roots(monkeypatch, root: Path) -> None:
 def _create_logged_in_client(monkeypatch, root: Path):
     auth_db = root / f"auth_{uuid.uuid4().hex}.sqlite"
     reset_auth_store_cache()
-    monkeypatch.setenv("DEEPTUTOR_AUTH_DB", str(auth_db))
+    monkeypatch.setenv("MASTER_PREP_AI_AUTH_DB", str(auth_db))
     reset_auth_store_cache()
     store = get_auth_store()
     user = store.create_first_admin("owner@example.com", "password123", "Owner")

@@ -7,8 +7,8 @@ from typing import Any
 
 import yaml
 
-from deeptutor.services.config import loader as loader_module
-from deeptutor.services.config.loader import (
+from master_prep_ai.services.config import loader as loader_module
+from master_prep_ai.services.config.loader import (
     DEFAULT_CHAT_PARAMS,
     get_chat_params,
 )
@@ -105,7 +105,7 @@ class TestChatLimitsDataclass:
     """Verify _ChatLimits.from_config gracefully handles malformed input."""
 
     def test_from_config_with_empty_dict_uses_fallbacks(self):
-        from deeptutor.agents.chat.agentic_pipeline import _ChatLimits
+        from master_prep_ai.agents.chat.agentic_pipeline import _ChatLimits
 
         limits = _ChatLimits.from_config({})
         assert limits.responding == 8000
@@ -116,26 +116,26 @@ class TestChatLimitsDataclass:
         assert limits.react_fallback == 1500
 
     def test_from_config_with_chat_params_defaults(self):
-        from deeptutor.agents.chat.agentic_pipeline import _ChatLimits
+        from master_prep_ai.agents.chat.agentic_pipeline import _ChatLimits
 
         limits = _ChatLimits.from_config(DEFAULT_CHAT_PARAMS)
         assert limits.responding == 8000
         assert limits.react_fallback == 1500
 
     def test_from_config_coerces_string_numbers(self):
-        from deeptutor.agents.chat.agentic_pipeline import _ChatLimits
+        from master_prep_ai.agents.chat.agentic_pipeline import _ChatLimits
 
         limits = _ChatLimits.from_config({"responding": {"max_tokens": "5000"}})
         assert limits.responding == 5000
 
     def test_from_config_falls_back_on_garbage(self):
-        from deeptutor.agents.chat.agentic_pipeline import _ChatLimits
+        from master_prep_ai.agents.chat.agentic_pipeline import _ChatLimits
 
         limits = _ChatLimits.from_config({"responding": {"max_tokens": "abc"}})
         assert limits.responding == 8000
 
     def test_from_config_handles_non_dict_stage_value(self):
-        from deeptutor.agents.chat.agentic_pipeline import _ChatLimits
+        from master_prep_ai.agents.chat.agentic_pipeline import _ChatLimits
 
         limits = _ChatLimits.from_config({"responding": 12345})
         assert limits.responding == 8000

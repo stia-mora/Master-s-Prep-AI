@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from deeptutor.services.notebook.service import NotebookManager, RecordType
+from master_prep_ai.services.notebook.service import NotebookManager, RecordType
 
 
 def test_add_record_accepts_enum_record_type(tmp_path) -> None:

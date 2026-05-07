@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""DeepTutor Setup Tour - simplified CLI configuration wizard."""
+"""Master Prep AI Setup Tour - simplified CLI configuration wizard."""
 
 from __future__ import annotations
 
@@ -123,7 +123,7 @@ def _load_runtime_deps():
         text_input,
     )
 
-    from deeptutor.services.config import get_env_store
+    from master_prep_ai.services.config import get_env_store
 
     return (
         accent,
@@ -185,7 +185,7 @@ MATH_ANIMATOR_REQUIREMENTS = "requirements/math-animator.txt"
 
 MESSAGES: dict[str, dict[str, str]] = {
     "en": {
-        "banner_line_1": "Configure DeepTutor from the terminal.",
+        "banner_line_1": "Configure Master Prep AI from the terminal.",
         "banner_line_2": "We will write ports and provider settings directly into .env.",
         "env_created": "Created `.env` from `.env.example`.",
         "env_exists": "Using existing `.env` file.",
@@ -227,7 +227,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "write_confirm": "Write these settings into `.env` now?",
         "write_success": "Updated `.env` successfully.",
         "no_changes": "No files changed.",
-        "next_steps": "Setup complete. You can now start DeepTutor with:",
+        "next_steps": "Setup complete. You can now start Master Prep AI with:",
         "next_command": "python scripts/start_web.py",
         "summary_ports": "Ports",
         "summary_llm": "LLM",
@@ -279,15 +279,15 @@ MESSAGES: dict[str, dict[str, str]] = {
         "install_backend_done": "Python dependencies installed.",
         "install_frontend": "Installing frontend dependencies (npm install) ...",
         "install_frontend_done": "Frontend dependencies installed.",
-        "install_editable": "Installing DeepTutor package ...",
-        "install_editable_done": "DeepTutor package installed.",
+        "install_editable": "Installing Master Prep AI package ...",
+        "install_editable_done": "Master Prep AI package installed.",
         "install_failed": "Installation failed: {error}",
         "install_skipped": "Skipped dependency installation.",
         "install_all_done": "All dependencies installed successfully.",
         "install_retry_node": "Press Enter after installing Node.js to continue, or Ctrl-C to exit.",
     },
     "zh": {
-        "banner_line_1": "在命令行中完成 DeepTutor 配置。",
+        "banner_line_1": "在命令行中完成 Master Prep AI 配置。",
         "banner_line_2": "我们会把端口和提供商配置直接写入 .env。",
         "env_created": "已根据 `.env.example` 创建 `.env`。",
         "env_exists": "检测到现有 `.env` 文件。",
@@ -329,7 +329,7 @@ MESSAGES: dict[str, dict[str, str]] = {
         "write_confirm": "现在将这些设置写入 `.env` 吗？",
         "write_success": "已成功更新 `.env`。",
         "no_changes": "未修改任何文件。",
-        "next_steps": "配置完成。你现在可以用下面的命令启动 DeepTutor：",
+        "next_steps": "配置完成。你现在可以用下面的命令启动 Master Prep AI：",
         "next_command": "python scripts/start_web.py",
         "summary_ports": "端口",
         "summary_llm": "LLM",
@@ -381,8 +381,8 @@ MESSAGES: dict[str, dict[str, str]] = {
         "install_backend_done": "Python 依赖安装完成。",
         "install_frontend": "正在安装前端依赖（npm install）...",
         "install_frontend_done": "前端依赖安装完成。",
-        "install_editable": "正在安装 DeepTutor 包 ...",
-        "install_editable_done": "DeepTutor 包安装完成。",
+        "install_editable": "正在安装 Master Prep AI 包 ...",
+        "install_editable_done": "Master Prep AI 包安装完成。",
         "install_failed": "安装失败：{error}",
         "install_skipped": "已跳过依赖安装。",
         "install_all_done": "所有依赖安装成功。",
@@ -614,8 +614,8 @@ def _enum_options(options: list[tuple[str, str, str]], current: str | None = Non
 
 
 def _load_provider_metadata():
-    from deeptutor.services.config.provider_runtime import EMBEDDING_PROVIDERS
-    from deeptutor.services.provider_registry import PROVIDERS, find_by_name
+    from master_prep_ai.services.config.provider_runtime import EMBEDDING_PROVIDERS
+    from master_prep_ai.services.provider_registry import PROVIDERS, find_by_name
 
     return EMBEDDING_PROVIDERS, find_by_name, PROVIDERS
 
@@ -1187,7 +1187,7 @@ def _write_env(values: dict[str, str]) -> None:
 
 def _tour_banner() -> None:
     banner(
-        "DeepTutor Setup Tour / DeepTutor 配置向导",
+        "Master Prep AI Setup Tour / Master Prep AI 配置向导",
         [
             "CLI-first setup wizard.",
             "命令行配置向导。",

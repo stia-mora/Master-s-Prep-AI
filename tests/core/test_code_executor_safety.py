@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor.tools.code_executor import CodeExecutionError, ImportGuard
+from master_prep_ai.tools.code_executor import CodeExecutionError, ImportGuard
 
 
 def test_import_guard_rejects_unsafe_builtin_calls() -> None:

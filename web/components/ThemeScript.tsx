@@ -11,7 +11,7 @@ export default function ThemeScript() {
   const themeScript = `
     (function() {
       try {
-        const stored = localStorage.getItem('deeptutor-theme');
+        const stored = localStorage.getItem('master_prep_ai-theme');
 
         document.documentElement.classList.remove('dark', 'theme-glass', 'theme-snow');
 
@@ -26,9 +26,9 @@ export default function ThemeScript() {
         } else {
           if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
             document.documentElement.classList.add('dark');
-            localStorage.setItem('deeptutor-theme', 'dark');
+            localStorage.setItem('master_prep_ai-theme', 'dark');
           } else {
-            localStorage.setItem('deeptutor-theme', 'light');
+            localStorage.setItem('master_prep_ai-theme', 'light');
           }
         }
       } catch (e) {

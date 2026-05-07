@@ -4,7 +4,7 @@
  */
 
 // Storage key prefix to avoid conflicts with other apps
-const STORAGE_PREFIX = "deeptutor_";
+const STORAGE_PREFIX = "master_prep_ai_";
 
 // Current storage version for data migration support
 const STORAGE_VERSION = 1;
@@ -107,7 +107,7 @@ export function removeFromStorage(key: string): void {
 }
 
 /**
- * Clear all DeepTutor data from localStorage
+ * Clear all Master Prep AI data from localStorage
  */
 export function clearAllStorage(): void {
   if (typeof window === "undefined") {
@@ -125,7 +125,7 @@ export function clearAllStorage(): void {
     }
 
     keysToRemove.forEach((key) => localStorage.removeItem(key));
-    console.info(`Cleared ${keysToRemove.length} DeepTutor storage items`);
+    console.info(`Cleared ${keysToRemove.length} Master Prep AI storage items`);
   } catch (error) {
     console.warn("Failed to clear localStorage:", error);
   }

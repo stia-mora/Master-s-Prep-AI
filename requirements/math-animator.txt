@@ -1,5 +1,5 @@
 # ============================================
-# DeepTutor Math Animator — Addon
+# Master Prep AI Math Animator — Addon
 # ============================================
 # Mirrors pyproject.toml `[project.optional-dependencies].math-animator`.
 # Keep in sync with pyproject.toml when adding/updating dependencies.

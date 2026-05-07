@@ -2,12 +2,12 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor.agents.research.request_config import (
+from master_prep_ai.agents.research.request_config import (
     build_research_execution_policy,
     build_research_runtime_config,
     validate_research_request_config,
 )
-from deeptutor.services.prompt import get_prompt_manager
+from master_prep_ai.services.prompt import get_prompt_manager
 
 
 def test_validate_research_request_config_allows_empty_sources() -> None:

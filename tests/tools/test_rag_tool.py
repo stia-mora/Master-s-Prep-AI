@@ -4,13 +4,13 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor.services.rag.factory import (
+from master_prep_ai.services.rag.factory import (
     DEFAULT_PROVIDER,
     get_pipeline,
     list_pipelines,
     normalize_provider_name,
 )
-from deeptutor.tools.rag_tool import (
+from master_prep_ai.tools.rag_tool import (
     RAGService,
     _resolve_kb_name,
     get_available_providers,
@@ -88,7 +88,7 @@ class TestToolLayerExports:
         assert get_available_providers() == RAGService.list_providers()
 
     def test_resolve_default_alias_to_configured_default(self, tmp_path) -> None:
-        from deeptutor.knowledge.manager import KnowledgeBaseManager
+        from master_prep_ai.knowledge.manager import KnowledgeBaseManager
 
         base_dir = tmp_path / "knowledge_bases"
         manager = KnowledgeBaseManager(base_dir=str(base_dir))
@@ -101,7 +101,7 @@ class TestToolLayerExports:
         assert _resolve_kb_name("default", kb_base_dir=str(base_dir)) == "actual-kb"
 
     def test_resolve_exact_kb_named_default_before_alias(self, tmp_path) -> None:
-        from deeptutor.knowledge.manager import KnowledgeBaseManager
+        from master_prep_ai.knowledge.manager import KnowledgeBaseManager
 
         base_dir = tmp_path / "knowledge_bases"
         manager = KnowledgeBaseManager(base_dir=str(base_dir))

@@ -3,7 +3,7 @@ from pathlib import Path
 import pytest
 import yaml
 
-from deeptutor.utils.config_manager import ConfigManager
+from master_prep_ai.utils.config_manager import ConfigManager
 
 
 def write_yaml(path: Path, data: dict) -> None:

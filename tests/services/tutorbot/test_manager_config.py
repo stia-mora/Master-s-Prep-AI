@@ -9,7 +9,7 @@ from types import SimpleNamespace
 import pytest
 import yaml
 
-from deeptutor.services.tutorbot.manager import BotConfig, TutorBotInstance, TutorBotManager
+from master_prep_ai.services.tutorbot.manager import BotConfig, TutorBotInstance, TutorBotManager
 
 
 @pytest.fixture
@@ -253,20 +253,20 @@ def test_start_bot_passes_shared_memory_dir(
         async def start(self) -> None:
             return None
 
-    monkeypatch.setattr("deeptutor.tutorbot.agent.loop.AgentLoop", FakeAgentLoop)
+    monkeypatch.setattr("master_prep_ai.tutorbot.agent.loop.AgentLoop", FakeAgentLoop)
     monkeypatch.setattr(
-        "deeptutor.tutorbot.providers.deeptutor_adapter.create_deeptutor_provider",
+        "master_prep_ai.tutorbot.providers.master_prep_ai_adapter.create_master_prep_ai_provider",
         lambda: object(),
     )
     monkeypatch.setattr(
-        "deeptutor.services.tutorbot.manager.TutorBotManager._build_channel_manager",
+        "master_prep_ai.services.tutorbot.manager.TutorBotManager._build_channel_manager",
         lambda *_args, **_kwargs: None,
     )
     monkeypatch.setattr(
-        "deeptutor.services.tutorbot.manager.TutorBotManager._outbound_router",
+        "master_prep_ai.services.tutorbot.manager.TutorBotManager._outbound_router",
         lambda *_args, **_kwargs: _done(),
     )
-    monkeypatch.setattr("deeptutor.tutorbot.heartbeat.HeartbeatService", FakeHeartbeat)
+    monkeypatch.setattr("master_prep_ai.tutorbot.heartbeat.HeartbeatService", FakeHeartbeat)
 
     async def run_start() -> None:
         instance = await manager.start_bot("shared-memory-bot", BotConfig(name="bot"))

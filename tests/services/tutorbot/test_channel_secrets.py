@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor.services.tutorbot.manager import (
+from master_prep_ai.services.tutorbot.manager import (
     BotConfig,
     TutorBotInstance,
     mask_channel_secrets,
@@ -138,7 +138,7 @@ async def test_reload_lock_serialises_concurrent_calls(monkeypatch):
     """Two concurrent reload_channels calls must not run their bodies in parallel."""
     import asyncio
 
-    from deeptutor.services.tutorbot.manager import TutorBotManager
+    from master_prep_ai.services.tutorbot.manager import TutorBotManager
 
     mgr = TutorBotManager()
     inst = _make_instance()
@@ -186,7 +186,7 @@ async def test_reload_lock_serialises_concurrent_calls(monkeypatch):
 async def test_reload_failure_records_last_reload_error(monkeypatch):
     import asyncio
 
-    from deeptutor.services.tutorbot.manager import TutorBotManager
+    from master_prep_ai.services.tutorbot.manager import TutorBotManager
 
     mgr = TutorBotManager()
     inst = _make_instance()

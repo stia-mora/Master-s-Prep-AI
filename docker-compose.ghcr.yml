@@ -1,14 +1,14 @@
 # ============================================
-# DeepTutor Docker Compose — Pre-built GHCR Image
+# Master Prep AI Docker Compose — Pre-built GHCR Image
 # ============================================
-# Run DeepTutor using the official pre-built image from GitHub Container Registry.
+# Run Master Prep AI using the official pre-built image from GitHub Container Registry.
 # No local build required — the image is pulled automatically.
 #
 # Usage:
 #   docker compose -f docker-compose.ghcr.yml up -d
 #
 # To pin a specific version:
-#   Edit the image tag below, e.g. ghcr.io/hkuds/deeptutor:1.0.0
+#   Edit the image tag below, e.g. ghcr.io/3171381144/master-s-prep-ai:1.0.0
 #
 # Prerequisites:
 #   1. Copy .env.example to .env and fill in your API keys
@@ -36,10 +36,10 @@
 # ============================================
 
 services:
-  deeptutor:
-    image: ghcr.io/hkuds/deeptutor:latest
+  master_prep_ai:
+    image: ghcr.io/3171381144/master-s-prep-ai:latest
     pull_policy: always
-    container_name: deeptutor
+    container_name: master_prep_ai
     restart: unless-stopped
     ports:
       - "${BACKEND_PORT:-8001}:${BACKEND_PORT:-8001}"
@@ -91,8 +91,8 @@ services:
       start_period: 60s
 
     networks:
-      - deeptutor-network
+      - master_prep_ai-network
 
 networks:
-  deeptutor-network:
+  master_prep_ai-network:
     driver: bridge

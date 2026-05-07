@@ -1,4 +1,4 @@
-"""CLI smoke tests for ``deeptutor notebook`` commands."""
+"""CLI smoke tests for ``master_prep_ai notebook`` commands."""
 
 from __future__ import annotations
 
@@ -6,7 +6,7 @@ from pathlib import Path
 
 from typer.testing import CliRunner
 
-from deeptutor_cli.main import app
+from master_prep_ai_cli.main import app
 
 runner = CliRunner()
 
@@ -90,7 +90,7 @@ _fake_manager = FakeNotebookManager()
 
 
 def _patch_facade(monkeypatch) -> None:
-    """Patch DeepTutorApp methods to use the shared fake manager."""
+    """Patch MasterPrepAIApp methods to use the shared fake manager."""
 
     def _create_notebook(self, **kwargs):
         return _fake_manager.create_notebook(**kwargs)
@@ -107,13 +107,13 @@ def _patch_facade(monkeypatch) -> None:
     def _remove_record(self, notebook_id, record_id) -> bool:
         return _fake_manager.remove_record(notebook_id, record_id)
 
-    from deeptutor.app import facade
+    from master_prep_ai.app import facade
 
-    monkeypatch.setattr(facade.DeepTutorApp, "create_notebook", _create_notebook)
-    monkeypatch.setattr(facade.DeepTutorApp, "get_notebook", _get_notebook)
-    monkeypatch.setattr(facade.DeepTutorApp, "add_record", _add_record)
-    monkeypatch.setattr(facade.DeepTutorApp, "update_record", _update_record)
-    monkeypatch.setattr(facade.DeepTutorApp, "remove_record", _remove_record)
+    monkeypatch.setattr(facade.MasterPrepAIApp, "create_notebook", _create_notebook)
+    monkeypatch.setattr(facade.MasterPrepAIApp, "get_notebook", _get_notebook)
+    monkeypatch.setattr(facade.MasterPrepAIApp, "add_record", _add_record)
+    monkeypatch.setattr(facade.MasterPrepAIApp, "update_record", _update_record)
+    monkeypatch.setattr(facade.MasterPrepAIApp, "remove_record", _remove_record)
 
 
 def test_notebook_add_md_creates_record(monkeypatch, tmp_path: Path) -> None:

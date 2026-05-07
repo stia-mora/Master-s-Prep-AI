@@ -1,4 +1,4 @@
-"""CLI smoke tests for the standalone ``deeptutor-cli`` package."""
+"""CLI smoke tests for the standalone ``master_prep_ai-cli`` package."""
 
 from __future__ import annotations
 
@@ -7,8 +7,8 @@ from typing import Any
 
 from typer.testing import CliRunner
 
-from deeptutor.app import TurnRequest
-from deeptutor_cli.main import app
+from master_prep_ai.app import TurnRequest
+from master_prep_ai_cli.main import app
 
 runner = CliRunner()
 
@@ -27,8 +27,8 @@ def _install_fake_runtime(monkeypatch, captured_requests: list[TurnRequest]) -> 
         yield {"type": "result", "metadata": {"response": "response body"}}
         yield {"type": "done"}
 
-    monkeypatch.setattr("deeptutor.app.facade.DeepTutorApp.start_turn", _start_turn)
-    monkeypatch.setattr("deeptutor.app.facade.DeepTutorApp.stream_turn", _stream_turn)
+    monkeypatch.setattr("master_prep_ai.app.facade.MasterPrepAIApp.start_turn", _start_turn)
+    monkeypatch.setattr("master_prep_ai.app.facade.MasterPrepAIApp.stream_turn", _stream_turn)
 
 
 def test_run_command_json_mode(monkeypatch) -> None:
@@ -120,7 +120,7 @@ def test_session_list_command_uses_shared_store(monkeypatch) -> None:
             }
         ]
 
-    monkeypatch.setattr("deeptutor.app.facade.DeepTutorApp.list_sessions", _list_sessions)
+    monkeypatch.setattr("master_prep_ai.app.facade.MasterPrepAIApp.list_sessions", _list_sessions)
 
     result = runner.invoke(app, ["session", "list"])
 

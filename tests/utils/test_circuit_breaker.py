@@ -5,7 +5,7 @@ from __future__ import annotations
 import time
 from unittest.mock import patch
 
-from deeptutor.utils.network.circuit_breaker import (
+from master_prep_ai.utils.network.circuit_breaker import (
     CircuitBreaker,
     alert_callback,
     is_call_allowed,
@@ -87,7 +87,7 @@ class TestCircuitBreakerStates:
 
 class TestModuleFunctions:
     def test_alert_callback_records_failure(self) -> None:
-        from deeptutor.utils.network import circuit_breaker as mod
+        from master_prep_ai.utils.network import circuit_breaker as mod
 
         cb = CircuitBreaker(failure_threshold=100, recovery_timeout=60)
         original = mod.circuit_breaker
@@ -99,7 +99,7 @@ class TestModuleFunctions:
             mod.circuit_breaker = original
 
     def test_is_call_allowed_delegates(self) -> None:
-        from deeptutor.utils.network import circuit_breaker as mod
+        from master_prep_ai.utils.network import circuit_breaker as mod
 
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=9999)
         original = mod.circuit_breaker
@@ -113,7 +113,7 @@ class TestModuleFunctions:
             mod.circuit_breaker = original
 
     def test_record_call_success_delegates(self) -> None:
-        from deeptutor.utils.network import circuit_breaker as mod
+        from master_prep_ai.utils.network import circuit_breaker as mod
 
         cb = CircuitBreaker(failure_threshold=1, recovery_timeout=0)
         original = mod.circuit_breaker

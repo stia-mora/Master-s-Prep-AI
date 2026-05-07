@@ -2,8 +2,8 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor.agents.question.agents.generator import Generator
-from deeptutor.agents.question.models import QuestionTemplate
+from master_prep_ai.agents.question.agents.generator import Generator
+from master_prep_ai.agents.question.models import QuestionTemplate
 
 
 class StubGenerator(Generator):

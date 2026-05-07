@@ -2,9 +2,9 @@ from __future__ import annotations
 
 from pathlib import Path
 
-from deeptutor.agents.research.utils.citation_manager import CitationManager
-from deeptutor.services.config.loader import load_config_with_main
-from deeptutor.services.path_service import PathService
+from master_prep_ai.agents.research.utils.citation_manager import CitationManager
+from master_prep_ai.services.config.loader import load_config_with_main
+from master_prep_ai.services.path_service import PathService
 
 
 def test_runtime_config_paths_are_confined_to_data_user() -> None:

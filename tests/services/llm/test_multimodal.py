@@ -10,9 +10,9 @@ from urllib.parse import quote
 
 import pytest
 
-from deeptutor.services.llm import multimodal as mm
-from deeptutor.services.llm.multimodal import prepare_multimodal_messages
-from deeptutor.services.storage import attachment_store
+from master_prep_ai.services.llm import multimodal as mm
+from master_prep_ai.services.llm.multimodal import prepare_multimodal_messages
+from master_prep_ai.services.storage import attachment_store
 
 
 def _msgs() -> list[dict]:

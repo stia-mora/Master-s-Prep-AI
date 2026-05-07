@@ -24,10 +24,10 @@ from typing import Any
 
 import pytest
 
-from deeptutor.services.config import env_store as env_store_module
-from deeptutor.services.config import model_catalog as model_catalog_module
-from deeptutor.services.config.env_store import EnvStore
-from deeptutor.services.config.model_catalog import ModelCatalogService
+from master_prep_ai.services.config import env_store as env_store_module
+from master_prep_ai.services.config import model_catalog as model_catalog_module
+from master_prep_ai.services.config.env_store import EnvStore
+from master_prep_ai.services.config.model_catalog import ModelCatalogService
 
 
 def _write_env(path: Path, lines: list[str]) -> None:

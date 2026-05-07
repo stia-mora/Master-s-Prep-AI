@@ -16,8 +16,8 @@ turn being re-routed to ``chat``). These tests pin the contract:
   ``visualize``).
 
 The tests deliberately avoid touching the real LLM stack: we patch
-``deeptutor.capabilities._answer_now.llm_stream`` (the alias the helper
-imports) and ``deeptutor.capabilities._answer_now.get_llm_config`` so
+``master_prep_ai.capabilities._answer_now.llm_stream`` (the alias the helper
+imports) and ``master_prep_ai.capabilities._answer_now.get_llm_config`` so
 the fast-paths run end-to-end without network or API keys.
 """
 
@@ -29,17 +29,17 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from deeptutor.capabilities import _answer_now
-from deeptutor.capabilities._answer_now import (
+from master_prep_ai.capabilities import _answer_now
+from master_prep_ai.capabilities._answer_now import (
     extract_answer_now_context,
     format_trace_summary,
     join_chunks,
     labeled_block,
     make_skip_notice,
 )
-from deeptutor.core.context import UnifiedContext
-from deeptutor.core.stream import StreamEvent, StreamEventType
-from deeptutor.core.stream_bus import StreamBus
+from master_prep_ai.core.context import UnifiedContext
+from master_prep_ai.core.stream import StreamEvent, StreamEventType
+from master_prep_ai.core.stream_bus import StreamBus
 
 # ---------------------------------------------------------------------------
 # Shared helpers
@@ -242,7 +242,7 @@ class TestChatAnswerNow:
 
     @pytest.mark.asyncio
     async def test_chat_synthesises_final_answer_from_partial_trace(self) -> None:
-        from deeptutor.agents.chat import agentic_pipeline as ap_module
+        from master_prep_ai.agents.chat import agentic_pipeline as ap_module
 
         async def _fake_stream(self: Any, _messages: Any, **_kwargs: Any):
             for chunk in ("Hello", " ", "world"):
@@ -257,11 +257,11 @@ class TestChatAnswerNow:
                 _fake_stream,
             ),
             patch(
-                "deeptutor.agents.chat.agentic_pipeline.get_llm_config",
+                "master_prep_ai.agents.chat.agentic_pipeline.get_llm_config",
                 return_value=cfg,
             ),
         ):
-            from deeptutor.capabilities.chat import ChatCapability
+            from master_prep_ai.capabilities.chat import ChatCapability
 
             ctx = _build_context(
                 capability="chat",
@@ -291,7 +291,7 @@ class TestDeepSolveAnswerNow:
             patch.object(_answer_now, "get_llm_config", return_value=cfg),
             patch.object(_answer_now, "llm_stream", _make_stream_factory(chunks)),
         ):
-            from deeptutor.capabilities.deep_solve import DeepSolveCapability
+            from master_prep_ai.capabilities.deep_solve import DeepSolveCapability
 
             ctx = _build_context(
                 capability="deep_solve",
@@ -356,7 +356,7 @@ class TestDeepQuestionAnswerNow:
             patch.object(_answer_now, "get_llm_config", return_value=cfg),
             patch.object(_answer_now, "llm_stream", _make_stream_factory([payload_json])),
         ):
-            from deeptutor.capabilities.deep_question import DeepQuestionCapability
+            from master_prep_ai.capabilities.deep_question import DeepQuestionCapability
 
             ctx = _build_context(
                 capability="deep_question",
@@ -392,7 +392,7 @@ class TestDeepQuestionAnswerNow:
             patch.object(_answer_now, "get_llm_config", return_value=cfg),
             patch.object(_answer_now, "llm_stream", _make_stream_factory(["not json at all"])),
         ):
-            from deeptutor.capabilities.deep_question import DeepQuestionCapability
+            from master_prep_ai.capabilities.deep_question import DeepQuestionCapability
 
             ctx = _build_context(
                 capability="deep_question",
@@ -420,7 +420,7 @@ class TestDeepResearchAnswerNow:
             patch.object(_answer_now, "get_llm_config", return_value=cfg),
             patch.object(_answer_now, "llm_stream", _make_stream_factory(chunks)),
         ):
-            from deeptutor.capabilities.deep_research import DeepResearchCapability
+            from master_prep_ai.capabilities.deep_research import DeepResearchCapability
 
             ctx = _build_context(
                 capability="deep_research",
@@ -465,7 +465,7 @@ class TestVisualizeAnswerNow:
             patch.object(_answer_now, "get_llm_config", return_value=cfg),
             patch.object(_answer_now, "llm_stream", _make_stream_factory([payload_json])),
         ):
-            from deeptutor.capabilities.visualize import VisualizeCapability
+            from master_prep_ai.capabilities.visualize import VisualizeCapability
 
             ctx = _build_context(
                 capability="visualize",
@@ -497,7 +497,7 @@ class TestVisualizeAnswerNow:
             patch.object(_answer_now, "get_llm_config", return_value=cfg),
             patch.object(_answer_now, "llm_stream", _make_stream_factory([payload_json])),
         ):
-            from deeptutor.capabilities.visualize import VisualizeCapability
+            from master_prep_ai.capabilities.visualize import VisualizeCapability
 
             ctx = _build_context(
                 capability="visualize",
@@ -518,7 +518,7 @@ class TestVisualizeAnswerNow:
             patch.object(_answer_now, "get_llm_config", return_value=cfg),
             patch.object(_answer_now, "llm_stream", _make_stream_factory([fenced])),
         ):
-            from deeptutor.capabilities.visualize import VisualizeCapability
+            from master_prep_ai.capabilities.visualize import VisualizeCapability
 
             ctx = _build_context(
                 capability="visualize",
@@ -548,7 +548,7 @@ class TestMathAnimatorAnswerNow:
         # math_animator.run() short-circuits before we can patch anything.
         import importlib.util as _ilu
 
-        from deeptutor.agents.math_animator.models import (
+        from master_prep_ai.agents.math_animator.models import (
             GeneratedCode,
             RenderResult,
         )
@@ -556,13 +556,13 @@ class TestMathAnimatorAnswerNow:
         if _ilu.find_spec("manim") is None:
             pytest.skip("manim not installed; math_animator answer-now test skipped")
 
-        from deeptutor.capabilities.math_animator import MathAnimatorCapability
+        from master_prep_ai.capabilities.math_animator import MathAnimatorCapability
 
         analysis_agent_calls: list[Any] = []
         design_agent_calls: list[Any] = []
         summary_agent_calls: list[Any] = []
 
-        with patch("deeptutor.agents.math_animator.pipeline.MathAnimatorPipeline") as PipelineCls:
+        with patch("master_prep_ai.agents.math_animator.pipeline.MathAnimatorPipeline") as PipelineCls:
             pipeline_instance = PipelineCls.return_value
             pipeline_instance.run_analysis = AsyncMock(
                 side_effect=lambda *a, **k: analysis_agent_calls.append(("a",))
@@ -630,12 +630,12 @@ class TestNormalPathWhenNoAnswerNow:
 
     @pytest.mark.asyncio
     async def test_deep_solve_without_payload_calls_main_solver(self) -> None:
-        from deeptutor.capabilities.deep_solve import DeepSolveCapability
+        from master_prep_ai.capabilities.deep_solve import DeepSolveCapability
 
         # We patch MainSolver at its import site inside the capability.
         with (
-            patch("deeptutor.agents.solve.main_solver.MainSolver") as SolverCls,
-            patch("deeptutor.services.llm.config.get_llm_config", return_value=_fake_llm_config()),
+            patch("master_prep_ai.agents.solve.main_solver.MainSolver") as SolverCls,
+            patch("master_prep_ai.services.llm.config.get_llm_config", return_value=_fake_llm_config()),
         ):
             solver = SolverCls.return_value
             solver.ainit = AsyncMock()

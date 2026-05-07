@@ -9,9 +9,9 @@ from typing import Any
 
 import pytest
 
-from deeptutor.core.tool_protocol import BaseTool, ToolDefinition, ToolParameter, ToolResult
-from deeptutor.runtime.registry.tool_registry import ToolRegistry
-from deeptutor.tools.builtin import (
+from master_prep_ai.core.tool_protocol import BaseTool, ToolDefinition, ToolParameter, ToolResult
+from master_prep_ai.runtime.registry.tool_registry import ToolRegistry
+from master_prep_ai.tools.builtin import (
     BrainstormTool,
     CodeExecutionTool,
     GeoGebraAnalysisTool,
@@ -55,7 +55,7 @@ async def test_brainstorm_tool_passes_llm_arguments(monkeypatch: pytest.MonkeyPa
         captured.update(kwargs)
         return {"answer": "## 1. Test idea\n- Rationale: worth exploring"}
 
-    _install_module(monkeypatch, "deeptutor.tools.brainstorm", brainstorm=fake_brainstorm)
+    _install_module(monkeypatch, "master_prep_ai.tools.brainstorm", brainstorm=fake_brainstorm)
 
     result = await BrainstormTool().execute(
         topic="agent-native tutoring",
@@ -77,7 +77,7 @@ async def test_rag_tool_forwards_query_and_extra_kwargs(monkeypatch: pytest.Monk
         captured.update(kwargs)
         return {"answer": "grounded answer", "provider": "fake"}
 
-    _install_module(monkeypatch, "deeptutor.tools.rag_tool", rag_search=fake_rag_search)
+    _install_module(monkeypatch, "master_prep_ai.tools.rag_tool", rag_search=fake_rag_search)
 
     result = await RAGTool().execute(
         query="what is a tensor",
@@ -104,7 +104,7 @@ async def test_web_search_tool_wraps_sync_function(monkeypatch: pytest.MonkeyPat
             "citations": [{"url": "https://example.com", "title": "Example"}],
         }
 
-    _install_module(monkeypatch, "deeptutor.tools.web_search", web_search=fake_web_search)
+    _install_module(monkeypatch, "master_prep_ai.tools.web_search", web_search=fake_web_search)
 
     result = await WebSearchTool().execute(query="latest benchmark", output_dir="/tmp/out")
 
@@ -128,7 +128,7 @@ async def test_code_execution_tool_uses_direct_code_path(monkeypatch: pytest.Mon
             "artifact_paths": [],
         }
 
-    _install_module(monkeypatch, "deeptutor.tools.code_executor", run_code=fake_run_code)
+    _install_module(monkeypatch, "master_prep_ai.tools.code_executor", run_code=fake_run_code)
 
     tool = CodeExecutionTool()
     result = await tool.execute(code="print(2 + 2)", timeout=5, workspace_dir="/tmp/code-runs")
@@ -154,7 +154,7 @@ async def test_code_execution_tool_generates_code_from_intent(
             "artifact_paths": ["/tmp/plot.png"],
         }
 
-    _install_module(monkeypatch, "deeptutor.tools.code_executor", run_code=fake_run_code)
+    _install_module(monkeypatch, "master_prep_ai.tools.code_executor", run_code=fake_run_code)
     tool = CodeExecutionTool()
 
     async def fake_generate_code(intent: str) -> str:
@@ -183,7 +183,7 @@ async def test_reason_tool_passes_llm_arguments(monkeypatch: pytest.MonkeyPatch)
         captured.update(kwargs)
         return {"answer": "reasoned"}
 
-    _install_module(monkeypatch, "deeptutor.tools.reason", reason=fake_reason)
+    _install_module(monkeypatch, "master_prep_ai.tools.reason", reason=fake_reason)
 
     result = await ReasonTool().execute(
         query="derive the formula",
@@ -216,7 +216,7 @@ async def test_paper_search_tool_formats_papers(monkeypatch: pytest.MonkeyPatch)
 
     _install_module(
         monkeypatch,
-        "deeptutor.tools.paper_search_tool",
+        "master_prep_ai.tools.paper_search_tool",
         ArxivSearchTool=FakeArxivSearchTool,
     )
 
@@ -250,12 +250,12 @@ async def test_geogebra_analysis_tool_handles_success(monkeypatch: pytest.Monkey
 
     _install_module(
         monkeypatch,
-        "deeptutor.agents.vision_solver.vision_solver_agent",
+        "master_prep_ai.agents.vision_solver.vision_solver_agent",
         VisionSolverAgent=FakeVisionSolverAgent,
     )
     _install_module(
         monkeypatch,
-        "deeptutor.services.llm.config",
+        "master_prep_ai.services.llm.config",
         get_llm_config=lambda: SimpleNamespace(api_key="k", base_url="u"),
     )
 

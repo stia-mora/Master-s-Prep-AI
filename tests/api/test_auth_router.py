@@ -6,15 +6,15 @@ import uuid
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 
-from deeptutor.api.routers import auth as auth_router
-from deeptutor.auth import get_auth_store, reset_auth_store_cache
+from master_prep_ai.api.routers import auth as auth_router
+from master_prep_ai.auth import get_auth_store, reset_auth_store_cache
 
 
 def _client(monkeypatch):
     root = Path("tests") / "auth_runtime"
     root.mkdir(parents=True, exist_ok=True)
     reset_auth_store_cache()
-    monkeypatch.setenv("DEEPTUTOR_AUTH_DB", str(root / f"auth_{uuid.uuid4().hex}.sqlite"))
+    monkeypatch.setenv("MASTER_PREP_AI_AUTH_DB", str(root / f"auth_{uuid.uuid4().hex}.sqlite"))
     reset_auth_store_cache()
     app = FastAPI()
     app.include_router(auth_router.router, prefix="/api/v1/auth")
@@ -32,7 +32,7 @@ def test_first_admin_registers_once_and_login_cookie_roundtrip(monkeypatch):
     )
     assert created.status_code == 200
     assert created.json()["user"]["role"] == "admin"
-    assert client.cookies.get("deeptutor_session")
+    assert client.cookies.get("master_prep_ai_session")
     assert client.get("/api/v1/auth/bootstrap").json() == {"has_users": True}
 
     duplicate = client.post(
@@ -67,11 +67,11 @@ def test_auth_store_cache_is_keyed_by_db_path(monkeypatch):
     second_db = root / f"auth_cache_{uuid.uuid4().hex}.sqlite"
 
     reset_auth_store_cache()
-    monkeypatch.setenv("DEEPTUTOR_AUTH_DB", str(first_db))
+    monkeypatch.setenv("MASTER_PREP_AI_AUTH_DB", str(first_db))
     first = get_auth_store()
     assert get_auth_store() is first
 
-    monkeypatch.setenv("DEEPTUTOR_AUTH_DB", str(second_db))
+    monkeypatch.setenv("MASTER_PREP_AI_AUTH_DB", str(second_db))
     second = get_auth_store()
     assert second is not first
 

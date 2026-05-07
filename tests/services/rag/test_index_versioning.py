@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from pathlib import Path
 
-from deeptutor.services.rag.index_versioning import (
+from master_prep_ai.services.rag.index_versioning import (
     EmbeddingSignature,
     find_matching_version,
     list_kb_versions,

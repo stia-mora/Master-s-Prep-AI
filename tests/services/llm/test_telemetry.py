@@ -3,7 +3,7 @@
 from _pytest.monkeypatch import MonkeyPatch
 import pytest
 
-from deeptutor.services.llm import telemetry
+from master_prep_ai.services.llm import telemetry
 
 
 class _FakeLogger:

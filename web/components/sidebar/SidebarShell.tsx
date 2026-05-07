@@ -48,7 +48,7 @@ const SECONDARY_NAV: NavEntry[] = [
   { href: "/settings", label: "Settings", icon: Settings },
 ];
 const DEFAULT_SESSION_VIEWPORT_CLASS_NAME = "max-h-[112px]";
-const GITHUB_REPO_URL = "https://github.com/HKUDS/DeepTutor";
+const GITHUB_REPO_URL = "https://github.com/3171381144/Master-s-Prep-AI";
 
 interface SidebarShellProps {
   sessions?: SessionSummary[];
@@ -98,12 +98,12 @@ export function SidebarShell({
         <div className="relative mb-2 flex h-9 w-9 items-center justify-center">
           <Link
             href="/"
-            aria-label="DeepTutor"
+            aria-label="Master Prep AI"
             className="flex items-center justify-center transition-opacity duration-150 group-hover/sb:opacity-0"
           >
             <Image
               src="/logo-ver2.png"
-              alt="DeepTutor"
+              alt="Master Prep AI"
               width={22}
               height={22}
               className="h-[22px] w-[22px] rounded-md"
@@ -213,13 +213,13 @@ export function SidebarShell({
         <Link href="/" className="group flex items-center gap-2">
           <Image
             src="/logo-ver2.png"
-            alt="DeepTutor"
+            alt="Master Prep AI"
             width={22}
             height={22}
             className="h-[22px] w-[22px] transition-transform duration-200 group-hover:scale-105"
           />
           <span className="text-[16px] font-semibold leading-none tracking-[-0.02em] text-[var(--foreground)]">
-            DeepTutor
+            Master Prep AI
           </span>
         </Link>
         <button

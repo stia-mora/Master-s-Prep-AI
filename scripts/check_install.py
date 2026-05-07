@@ -1,6 +1,6 @@
 #!/usr/bin/env python
 """
-DeepTutor Installation Checker
+Master Prep AI Installation Checker
 
 Verifies that all required dependencies are correctly installed.
 Run this script to diagnose installation issues.
@@ -379,7 +379,7 @@ def check_env_file(project_root: Path) -> bool:
 def main():
     """Main function"""
     print("\n" + "=" * 60)
-    print("🔍 DeepTutor Installation Checker")
+    print("🔍 Master Prep AI Installation Checker")
     print("=" * 60)
     print("Checking all dependencies and configurations...")
 
@@ -442,7 +442,7 @@ def main():
     print("")
     if all_checks_passed:
         print_success("All required dependencies are installed!")
-        print_info("You can start DeepTutor with: python scripts/start_web.py")
+        print_info("You can start Master Prep AI with: python scripts/start_web.py")
     else:
         print_error("Some dependencies are missing!")
         print_info("Run: python scripts/start_tour.py")

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
-from deeptutor.services.memory.service import MemoryService
-from deeptutor.services.session.sqlite_store import SQLiteSessionStore
+from master_prep_ai.services.memory.service import MemoryService
+from master_prep_ai.services.session.sqlite_store import SQLiteSessionStore
 
 
 def _make_service(tmp_path):
@@ -31,12 +31,12 @@ async def _no_change_stream(**_kwargs):
 
 
 async def _rewrite_stream(**_kwargs):
-    yield "## Preferences\n- Prefer concise answers.\n\n## Context\n- Working on DeepTutor memory."
+    yield "## Preferences\n- Prefer concise answers.\n\n## Context\n- Working on Master Prep AI memory."
 
 
 def test_memory_service_refresh_turn_writes_rewritten_document(monkeypatch, tmp_path) -> None:
     service = _make_service(tmp_path)
-    monkeypatch.setattr("deeptutor.services.memory.service.llm_stream", _rewrite_stream)
+    monkeypatch.setattr("master_prep_ai.services.memory.service.llm_stream", _rewrite_stream)
 
     import asyncio
 
@@ -60,7 +60,7 @@ def test_memory_service_refresh_turn_skips_when_model_returns_no_change(
     tmp_path,
 ) -> None:
     service = _make_service(tmp_path)
-    monkeypatch.setattr("deeptutor.services.memory.service.llm_stream", _no_change_stream)
+    monkeypatch.setattr("master_prep_ai.services.memory.service.llm_stream", _no_change_stream)
 
     import asyncio
 

@@ -21,7 +21,7 @@ from typing import Any
 import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-AGENTS_DIR = PROJECT_ROOT / "deeptutor" / "agents"
+AGENTS_DIR = PROJECT_ROOT / "master_prep_ai" / "agents"
 
 
 def _load_yaml(path: Path) -> Any:

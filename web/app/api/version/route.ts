@@ -23,7 +23,7 @@ export const runtime = "nodejs";
 const LATEST_REVALIDATE_SECONDS = 3600;
 const LATEST_FALLBACK_CACHE_SECONDS = 300;
 
-const DEFAULT_REPO = "HKUDS/DeepTutor";
+const DEFAULT_REPO = "3171381144/Master-s-Prep-AI";
 
 interface GithubRelease {
   tag_name: string;
@@ -127,7 +127,7 @@ async function fetchLatestRelease(
   const headers: Record<string, string> = {
     Accept: "application/vnd.github+json",
     "X-GitHub-Api-Version": "2022-11-28",
-    "User-Agent": "deeptutor-web",
+    "User-Agent": "master_prep_ai-web",
   };
   if (process.env.GITHUB_TOKEN) {
     headers.Authorization = `Bearer ${process.env.GITHUB_TOKEN}`;

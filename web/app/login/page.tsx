@@ -38,7 +38,7 @@ export default function LoginPage() {
       <form onSubmit={submit} className="w-full max-w-sm rounded-lg border border-[var(--border)] bg-[var(--card)] p-6 shadow-sm">
         <div className="mb-6 flex items-center gap-3">
           <div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)]"><GraduationCap size={21} /></div>
-          <div><h1 className="text-xl font-semibold">DeepTutor 登录</h1><p className="text-sm text-[var(--muted-foreground)]">使用本地账号进入学习工作区</p></div>
+          <div><h1 className="text-xl font-semibold">Master Prep AI 登录</h1><p className="text-sm text-[var(--muted-foreground)]">使用本地账号进入学习工作区</p></div>
         </div>
         {error ? <div className="mb-3 rounded-md border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-3 py-2 text-sm text-[var(--destructive)]">{error}</div> : null}
         <label className="mb-3 block text-sm">邮箱<input className="mt-1 w-full rounded-lg border bg-transparent px-3 py-2" type="email" value={email} onChange={(e) => setEmail(e.target.value)} required /></label>

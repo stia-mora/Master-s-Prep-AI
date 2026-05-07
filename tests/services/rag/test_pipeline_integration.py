@@ -92,7 +92,7 @@ class PipelineIntegrationTest:
         print_info(f"Created temp directory: {self.temp_dir}")
 
         # Initialize service with temp directory
-        from deeptutor.services.rag import RAGService
+        from master_prep_ai.services.rag import RAGService
 
         self.service = RAGService(kb_base_dir=self.temp_dir, provider=self.pipeline_name)
 
@@ -204,7 +204,7 @@ class PipelineIntegrationTest:
         print("\n  馃敡 Testing via rag_tool.py...")
 
         try:
-            from deeptutor.tools.rag_tool import rag_search
+            from master_prep_ai.tools.rag_tool import rag_search
 
             result = await rag_search(
                 query="What does Shandong have?",
@@ -304,7 +304,7 @@ class PipelineIntegrationTest:
 
 def get_available_pipelines():
     """Get list of available pipelines"""
-    from deeptutor.services.rag import RAGService
+    from master_prep_ai.services.rag import RAGService
 
     return [p["id"] for p in RAGService.list_providers()]
 

@@ -4,9 +4,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from deeptutor.core.stream import StreamEvent, StreamEventType
-from deeptutor.services.session.sqlite_store import SQLiteSessionStore
-from deeptutor.services.session.turn_runtime import TurnRuntimeManager
+from master_prep_ai.core.stream import StreamEvent, StreamEventType
+from master_prep_ai.services.session.sqlite_store import SQLiteSessionStore
+from master_prep_ai.services.session.turn_runtime import TurnRuntimeManager
 
 
 async def _noop_refresh(**_kwargs):
@@ -55,13 +55,13 @@ async def test_turn_runtime_replays_events_and_materializes_messages(
             )
             yield StreamEvent(type=StreamEventType.DONE, source="chat")
 
-    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr("master_prep_ai.services.llm.config.get_llm_config", lambda: SimpleNamespace())
     monkeypatch.setattr(
-        "deeptutor.services.session.context_builder.ContextBuilder", FakeContextBuilder
+        "master_prep_ai.services.session.context_builder.ContextBuilder", FakeContextBuilder
     )
-    monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr("master_prep_ai.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
     monkeypatch.setattr(
-        "deeptutor.services.memory.get_memory_service",
+        "master_prep_ai.services.memory.get_memory_service",
         lambda: SimpleNamespace(
             build_memory_context=lambda: "",
             refresh_from_turn=_noop_refresh,
@@ -145,13 +145,13 @@ async def test_turn_runtime_bootstraps_question_followup_context_once(
             )
             yield StreamEvent(type=StreamEventType.DONE, source="chat")
 
-    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr("master_prep_ai.services.llm.config.get_llm_config", lambda: SimpleNamespace())
     monkeypatch.setattr(
-        "deeptutor.services.session.context_builder.ContextBuilder", FakeContextBuilder
+        "master_prep_ai.services.session.context_builder.ContextBuilder", FakeContextBuilder
     )
-    monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr("master_prep_ai.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
     monkeypatch.setattr(
-        "deeptutor.services.memory.get_memory_service",
+        "master_prep_ai.services.memory.get_memory_service",
         lambda: SimpleNamespace(
             build_memory_context=lambda: "",
             refresh_from_turn=_noop_refresh,
@@ -262,13 +262,13 @@ async def test_turn_runtime_persists_deep_research_session_preference(
             )
             yield StreamEvent(type=StreamEventType.DONE, source="deep_research")
 
-    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr("master_prep_ai.services.llm.config.get_llm_config", lambda: SimpleNamespace())
     monkeypatch.setattr(
-        "deeptutor.services.session.context_builder.ContextBuilder", FakeContextBuilder
+        "master_prep_ai.services.session.context_builder.ContextBuilder", FakeContextBuilder
     )
-    monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr("master_prep_ai.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
     monkeypatch.setattr(
-        "deeptutor.services.memory.get_memory_service",
+        "master_prep_ai.services.memory.get_memory_service",
         lambda: SimpleNamespace(
             build_memory_context=lambda: "",
             refresh_from_turn=_noop_refresh,
@@ -348,13 +348,13 @@ async def test_turn_runtime_injects_memory_and_refreshes_after_completion(
         refresh_calls.append(kwargs)
         return None
 
-    monkeypatch.setattr("deeptutor.services.llm.config.get_llm_config", lambda: SimpleNamespace())
+    monkeypatch.setattr("master_prep_ai.services.llm.config.get_llm_config", lambda: SimpleNamespace())
     monkeypatch.setattr(
-        "deeptutor.services.session.context_builder.ContextBuilder", FakeContextBuilder
+        "master_prep_ai.services.session.context_builder.ContextBuilder", FakeContextBuilder
     )
-    monkeypatch.setattr("deeptutor.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
+    monkeypatch.setattr("master_prep_ai.runtime.orchestrator.ChatOrchestrator", FakeOrchestrator)
     monkeypatch.setattr(
-        "deeptutor.services.memory.get_memory_service",
+        "master_prep_ai.services.memory.get_memory_service",
         lambda: SimpleNamespace(
             build_memory_context=lambda: "## Memory\n## Preferences\n- Prefer concise answers.",
             refresh_from_turn=fake_refresh_from_turn,

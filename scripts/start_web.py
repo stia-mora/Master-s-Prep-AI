@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""DeepTutor Web Launcher — starts backend + frontend from the active .env."""
+"""Master Prep AI Web Launcher — starts backend + frontend from the active .env."""
 
 from __future__ import annotations
 
@@ -20,7 +20,7 @@ if str(PROJECT_ROOT) not in sys.path:
 def _load_runtime_deps():
     from _cli_kit import accent, banner, bold, dim, log_error, log_info, log_success, warn
 
-    from deeptutor.services.config import get_env_store
+    from master_prep_ai.services.config import get_env_store
 
     return accent, banner, bold, dim, log_error, log_info, log_success, warn, get_env_store
 
@@ -109,7 +109,7 @@ def main() -> None:
 
     # Banner
     banner(
-        "DeepTutor",
+        "Master Prep AI",
         [
             f"Backend   http://localhost:{backend_port}",
             f"Frontend  http://localhost:{frontend_port}",
@@ -135,7 +135,7 @@ def main() -> None:
     frontend_env["NEXT_PUBLIC_API_BASE"] = api_base
     frontend_env["PYTHONIOENCODING"] = "utf-8:replace"
 
-    backend_cmd = [sys.executable, "-m", "deeptutor.api.run_server"]
+    backend_cmd = [sys.executable, "-m", "master_prep_ai.api.run_server"]
     frontend_cmd = [npm, "run", "dev", "--", "--port", str(frontend_port)]
 
     log_info("Starting backend ...")

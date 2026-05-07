@@ -1,7 +1,7 @@
 # ============================================
-# DeepTutor Multi-Stage Dockerfile
+# Master Prep AI Multi-Stage Dockerfile
 # ============================================
-# This Dockerfile builds a production-ready image for DeepTutor
+# This Dockerfile builds a production-ready image for Master Prep AI
 # containing both the FastAPI backend and Next.js frontend
 #
 # Build: docker compose build
@@ -106,8 +106,8 @@ FROM python:3.11-slim AS production
 ARG APP_VERSION=""
 
 # Labels
-LABEL maintainer="DeepTutor Team" \
-      description="DeepTutor: AI-Powered Personalized Learning Assistant" \
+LABEL maintainer="Master Prep AI Team" \
+      description="Master Prep AI: AI-Powered Personalized Learning Assistant" \
       version="1.0.0"
 
 # Set environment variables
@@ -156,8 +156,8 @@ COPY --from=frontend-builder /app/web/.next/static/ ./web/.next/static/
 COPY --from=frontend-builder /app/web/public/ ./web/public/
 
 # Copy application source code
-COPY deeptutor/ ./deeptutor/
-COPY deeptutor_cli/ ./deeptutor_cli/
+COPY master_prep_ai/ ./master_prep_ai/
+COPY master_prep_ai_cli/ ./master_prep_ai_cli/
 COPY scripts/ ./scripts/
 COPY pyproject.toml ./
 COPY requirements/ ./requirements/
@@ -184,7 +184,7 @@ RUN mkdir -p \
 # Log output goes to stdout/stderr so docker logs can capture them
 RUN mkdir -p /etc/supervisor/conf.d
 
-RUN cat > /etc/supervisor/conf.d/deeptutor.conf <<'EOF'
+RUN cat > /etc/supervisor/conf.d/master_prep_ai.conf <<'EOF'
 [supervisord]
 nodaemon=true
 logfile=/dev/null
@@ -215,7 +215,7 @@ stderr_logfile_maxbytes=0
 environment=NODE_ENV="production"
 EOF
 
-RUN sed -i 's/\r$//' /etc/supervisor/conf.d/deeptutor.conf
+RUN sed -i 's/\r$//' /etc/supervisor/conf.d/master_prep_ai.conf
 
 # Create backend startup script
 RUN cat > /app/start-backend.sh <<'EOF'
@@ -229,7 +229,7 @@ echo "[Backend]  🚀 Starting FastAPI backend on port ${BACKEND_PORT}..."
 # Run uvicorn directly - the application's logging system already handles:
 # 1. Console output (visible in docker logs)
 # 2. File logging to data/user/logs/ai_tutor_*.log
-exec python -m uvicorn deeptutor.api.main:app --host 0.0.0.0 --port ${BACKEND_PORT}
+exec python -m uvicorn master_prep_ai.api.main:app --host 0.0.0.0 --port ${BACKEND_PORT}
 EOF
 
 RUN sed -i 's/\r$//' /app/start-backend.sh && chmod +x /app/start-backend.sh
@@ -285,7 +285,7 @@ RUN cat > /app/entrypoint.sh <<'EOF'
 set -e
 
 echo "============================================"
-echo "🚀 Starting DeepTutor"
+echo "🚀 Starting Master Prep AI"
 echo "============================================"
 
 # Set default ports if not provided
@@ -311,7 +311,7 @@ echo "📁 Checking data directories..."
 echo "   Ensuring runtime settings and workspace layout..."
 python -c "
 from pathlib import Path
-from deeptutor.services.setup import init_user_directories
+from master_prep_ai.services.setup import init_user_directories
 init_user_directories(Path('/app'))
 " 2>/dev/null || echo "   ⚠️ Directory initialization skipped (will be created on first use)"
 
@@ -323,7 +323,7 @@ echo "   - data/user/settings/agents.yaml"
 echo "============================================"
 
 # Start supervisord
-exec /usr/bin/supervisord -c /etc/supervisor/conf.d/deeptutor.conf
+exec /usr/bin/supervisord -c /etc/supervisor/conf.d/master_prep_ai.conf
 EOF
 
 RUN sed -i 's/\r$//' /app/entrypoint.sh && chmod +x /app/entrypoint.sh
@@ -363,7 +363,7 @@ RUN pip install --no-cache-dir \
 
 # Override supervisord config for development (with reload)
 # Log output goes to stdout/stderr so docker logs can capture them
-RUN cat > /etc/supervisor/conf.d/deeptutor.conf <<'EOF'
+RUN cat > /etc/supervisor/conf.d/master_prep_ai.conf <<'EOF'
 [supervisord]
 nodaemon=true
 logfile=/dev/null
@@ -371,7 +371,7 @@ logfile_maxbytes=0
 pidfile=/var/run/supervisord.pid
 
 [program:backend]
-command=python -m uvicorn deeptutor.api.main:app --host 0.0.0.0 --port %(ENV_BACKEND_PORT)s --reload
+command=python -m uvicorn master_prep_ai.api.main:app --host 0.0.0.0 --port %(ENV_BACKEND_PORT)s --reload
 directory=/app
 autostart=true
 autorestart=true
@@ -394,7 +394,7 @@ stderr_logfile_maxbytes=0
 environment=NODE_ENV="development"
 EOF
 
-RUN sed -i 's/\r$//' /etc/supervisor/conf.d/deeptutor.conf
+RUN sed -i 's/\r$//' /etc/supervisor/conf.d/master_prep_ai.conf
 
 # Development ports
 EXPOSE 8001 3782

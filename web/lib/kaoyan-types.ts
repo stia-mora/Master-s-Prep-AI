@@ -225,3 +225,71 @@ export interface ReviewItem {
   review_count: number;
   status: string;
 }
+export interface PlanReorderResult {
+  old_task_order: string[];
+  new_task_order: string[];
+  reason: string;
+  adjustment_summary: string;
+  need_confirm: boolean;
+  plan_task_version: Record<string, unknown>;
+}
+
+export interface MaterialParseTask {
+  task_id: string;
+  filename: string;
+  content_type: string;
+  status: string;
+  progress?: number;
+  retry_count: number;
+  fail_reason: string;
+  created_at: string;
+  updated_at?: string;
+}
+
+export interface RagQueryResult {
+  kb_name: string;
+  query: string;
+  status?: string;
+  answer?: string;
+  results: unknown[];
+  fallback?: string;
+  error?: string;
+  raw?: Record<string, unknown>;
+}
+
+export interface MasteryRecord {
+  mastery_id: string;
+  user_id: string;
+  knowledge_id: string;
+  mastery_score: number;
+  attempts: number;
+  correct_count: number;
+  wrong_count: number;
+  last_practiced_at?: string | null;
+  updated_at: string;
+}
+
+export interface ExamSimulation {
+  simulation_id: string;
+  status: "reserved" | string;
+  subject: string;
+  year?: number | null;
+  module: string;
+  time_limit_minutes: number;
+  practice_session: PracticeSession;
+  questions: ContentQuestion[];
+  score_report?: unknown;
+}
+
+export interface ExamSubmitResult {
+  simulation_id: string;
+  elapsed_seconds?: number | null;
+  score_report: {
+    total_count: number;
+    correct_count: number;
+    accuracy: number;
+    analysis_summary: string;
+    next_actions: string[];
+  };
+  practice_result: PracticeResult;
+}

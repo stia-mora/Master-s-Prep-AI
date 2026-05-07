@@ -8,8 +8,8 @@ from typing import Any
 
 import pytest
 
-from deeptutor.services.embedding.adapters.base import EmbeddingRequest
-from deeptutor.services.embedding.adapters.dashscope_native import (
+from master_prep_ai.services.embedding.adapters.base import EmbeddingRequest
+from master_prep_ai.services.embedding.adapters.dashscope_native import (
     DashScopeMultiModalEmbeddingAdapter,
 )
 

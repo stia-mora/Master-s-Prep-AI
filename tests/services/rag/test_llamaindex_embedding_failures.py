@@ -6,7 +6,7 @@ import pytest
 
 
 def test_custom_embedding_rejects_null_coordinates(monkeypatch: pytest.MonkeyPatch) -> None:
-    from deeptutor.services.rag.pipelines.llamaindex import (
+    from master_prep_ai.services.rag.pipelines.llamaindex import (
         embedding_adapter as embedding_module,
     )
 
@@ -28,8 +28,8 @@ def test_custom_embedding_rejects_null_coordinates(monkeypatch: pytest.MonkeyPat
 async def test_search_returns_reindex_hint_for_null_vector_index(
     tmp_path, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    from deeptutor.services.rag.pipelines.llamaindex import storage as storage_module
-    from deeptutor.services.rag.pipelines.llamaindex.pipeline import LlamaIndexPipeline
+    from master_prep_ai.services.rag.pipelines.llamaindex import storage as storage_module
+    from master_prep_ai.services.rag.pipelines.llamaindex.pipeline import LlamaIndexPipeline
 
     storage_dir = tmp_path / "kb" / "version-1"
     storage_dir.mkdir(parents=True)

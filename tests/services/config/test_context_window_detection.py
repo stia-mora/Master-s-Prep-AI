@@ -2,10 +2,10 @@ from __future__ import annotations
 
 import asyncio
 
-from deeptutor.services.config.context_window_detection import (
+from master_prep_ai.services.config.context_window_detection import (
     detect_context_window,
 )
-from deeptutor.services.llm.config import LLMConfig
+from master_prep_ai.services.llm.config import LLMConfig
 
 
 def _config(**overrides):
@@ -36,7 +36,7 @@ async def _metadata_none(*_args, **_kwargs):
 
 def test_detect_context_window_prefers_provider_metadata(monkeypatch) -> None:
     monkeypatch.setattr(
-        "deeptutor.services.config.context_window_detection._detect_from_models_endpoint",
+        "master_prep_ai.services.config.context_window_detection._detect_from_models_endpoint",
         _metadata_128k,
     )
     result = asyncio.run(detect_context_window(_config(model="kimi-k2.6")))
@@ -49,7 +49,7 @@ def test_detect_context_window_uses_runtime_default_when_metadata_missing(
     monkeypatch,
 ) -> None:
     monkeypatch.setattr(
-        "deeptutor.services.config.context_window_detection._detect_from_models_endpoint",
+        "master_prep_ai.services.config.context_window_detection._detect_from_models_endpoint",
         _metadata_none,
     )
     result = asyncio.run(

@@ -14,7 +14,7 @@ from __future__ import annotations
 from fastapi.testclient import TestClient
 import pytest
 
-from deeptutor.api.routers._tutorbot_channel_schema import (
+from master_prep_ai.api.routers._tutorbot_channel_schema import (
     all_channel_schemas,
     channel_schema_payload,
     collect_secret_fields,
@@ -25,17 +25,17 @@ from deeptutor.api.routers._tutorbot_channel_schema import (
 
 class TestResolveConfigModel:
     def test_telegram_pairs_with_telegram_config(self) -> None:
-        from deeptutor.tutorbot.channels.telegram import TelegramChannel, TelegramConfig
+        from master_prep_ai.tutorbot.channels.telegram import TelegramChannel, TelegramConfig
 
         assert resolve_config_model(TelegramChannel) is TelegramConfig
 
     def test_slack_pairs_with_slack_config(self) -> None:
-        from deeptutor.tutorbot.channels.slack import SlackChannel, SlackConfig
+        from master_prep_ai.tutorbot.channels.slack import SlackChannel, SlackConfig
 
         assert resolve_config_model(SlackChannel) is SlackConfig
 
     def test_discord_pairs_with_discord_config(self) -> None:
-        from deeptutor.tutorbot.channels.discord import DiscordChannel, DiscordConfig
+        from master_prep_ai.tutorbot.channels.discord import DiscordChannel, DiscordConfig
 
         assert resolve_config_model(DiscordChannel) is DiscordConfig
 
@@ -116,7 +116,7 @@ class TestCollectSecretFields:
 
 class TestChannelSchemaPayload:
     def test_telegram_payload_shape(self) -> None:
-        from deeptutor.tutorbot.channels.telegram import TelegramChannel
+        from master_prep_ai.tutorbot.channels.telegram import TelegramChannel
 
         payload = channel_schema_payload(TelegramChannel)
         assert payload is not None
@@ -129,7 +129,7 @@ class TestChannelSchemaPayload:
         assert payload["default_config"]["enabled"] is False
 
     def test_slack_dm_subtree_inlined(self) -> None:
-        from deeptutor.tutorbot.channels.slack import SlackChannel
+        from master_prep_ai.tutorbot.channels.slack import SlackChannel
 
         payload = channel_schema_payload(SlackChannel)
         assert payload is not None
@@ -149,7 +149,7 @@ class TestEndpoint:
         # fixturing of ``get_tutorbot_manager`` is needed.
         from fastapi import FastAPI
 
-        from deeptutor.api.routers import tutorbot as tutorbot_router
+        from master_prep_ai.api.routers import tutorbot as tutorbot_router
 
         app = FastAPI()
         app.include_router(tutorbot_router.router, prefix="/api/v1/tutorbot")

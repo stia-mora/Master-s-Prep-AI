@@ -1,7 +1,7 @@
 <!--
-Thank you for contributing to DeepTutor! 🚀
+Thank you for contributing to Master Prep AI! 🚀
 Please ensure your PR is ready for review and follows our contribution guidelines.
-For more details, see our [CONTRIBUTING.md](https://github.com/HKUDS/DeepTutor/blob/dev/CONTRIBUTING.md).
+For more details, see our [CONTRIBUTING.md](https://github.com/3171381144/Master-s-Prep-AI/blob/dev/CONTRIBUTING.md).
 -->
 
 ### Description
@@ -28,7 +28,7 @@ For more details, see our [CONTRIBUTING.md](https://github.com/HKUDS/DeepTutor/b
 - [ ] Other: `...`
 
 ### Checklist
-- [ ] I have read and followed the [contribution guidelines](https://github.com/HKUDS/DeepTutor/blob/dev/CONTRIBUTING.md).
+- [ ] I have read and followed the [contribution guidelines](https://github.com/3171381144/Master-s-Prep-AI/blob/dev/CONTRIBUTING.md).
 - [ ] My code follows the project's coding standards.
 - [ ] I have run `pre-commit run --all-files` and fixed any issues.
 - [ ] I have added relevant tests for my changes.

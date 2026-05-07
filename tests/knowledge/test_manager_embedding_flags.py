@@ -5,7 +5,7 @@ from pathlib import Path
 
 import pytest
 
-from deeptutor.knowledge.manager import KnowledgeBaseManager
+from master_prep_ai.knowledge.manager import KnowledgeBaseManager
 
 
 class _Signature:
@@ -17,8 +17,8 @@ class _Signature:
 
 
 def _patch_active_embedding(monkeypatch: pytest.MonkeyPatch, sig_hash: str = "active-signature") -> None:
-    from deeptutor.knowledge import manager as manager_module
-    from deeptutor.services.rag import embedding_signature
+    from master_prep_ai.knowledge import manager as manager_module
+    from master_prep_ai.services.rag import embedding_signature
 
     monkeypatch.setattr(manager_module, "_get_embedding_fingerprint", lambda: ("embed-active", 4096))
     monkeypatch.setattr(

@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import pytest
 
-from deeptutor.knowledge.naming import validate_knowledge_base_name
+from master_prep_ai.knowledge.naming import validate_knowledge_base_name
 
 
 def test_validate_knowledge_base_name_allows_unicode_and_spaces() -> None:

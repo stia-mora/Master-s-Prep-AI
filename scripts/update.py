@@ -1,5 +1,5 @@
 #!/usr/bin/env python
-"""Safely update a local DeepTutor git checkout.
+"""Safely update a local Master Prep AI git checkout.
 
 The updater is intentionally conservative:
 1. Fetch the remote for the current branch.
@@ -394,13 +394,13 @@ def run_update(repo_root: Path, *, assume_yes: bool) -> int:
         print(f"Changed files: {len(changed_files)}")
     for hint in dependency_hints(changed_files):
         print(f"Next step: {hint}")
-    print("Restart DeepTutor if it is currently running.")
+    print("Restart Master Prep AI if it is currently running.")
     return 0
 
 
 def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
     parser = argparse.ArgumentParser(
-        description="Fetch, review, and fast-forward update a local DeepTutor checkout."
+        description="Fetch, review, and fast-forward update a local Master Prep AI checkout."
     )
     parser.add_argument(
         "--yes",
@@ -412,7 +412,7 @@ def parse_args(argv: Sequence[str] | None = None) -> argparse.Namespace:
         "--repo",
         type=Path,
         default=PROJECT_ROOT,
-        help="Path to the git checkout to update. Defaults to this DeepTutor repository.",
+        help="Path to the git checkout to update. Defaults to this Master Prep AI repository.",
     )
     return parser.parse_args(argv)
 

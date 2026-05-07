@@ -4,9 +4,9 @@ from typing import Any
 
 import pytest
 
-from deeptutor.agents.solve.agents.planner_agent import PlannerAgent
-from deeptutor.agents.solve.tool_runtime import SolveToolRuntime
-from deeptutor.core.tool_protocol import (
+from master_prep_ai.agents.solve.agents.planner_agent import PlannerAgent
+from master_prep_ai.agents.solve.tool_runtime import SolveToolRuntime
+from master_prep_ai.core.tool_protocol import (
     ToolAlias,
     ToolDefinition,
     ToolParameter,

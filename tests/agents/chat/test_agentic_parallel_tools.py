@@ -6,12 +6,12 @@ from typing import Any
 
 import pytest
 
-from deeptutor.agents.chat.agentic_pipeline import AgenticChatPipeline
-from deeptutor.core.context import UnifiedContext
-from deeptutor.core.stream import StreamEvent, StreamEventType
-from deeptutor.core.stream_bus import StreamBus
-from deeptutor.core.tool_protocol import ToolResult
-from deeptutor.core.trace import build_trace_metadata
+from master_prep_ai.agents.chat.agentic_pipeline import AgenticChatPipeline
+from master_prep_ai.core.context import UnifiedContext
+from master_prep_ai.core.stream import StreamEvent, StreamEventType
+from master_prep_ai.core.stream_bus import StreamBus
+from master_prep_ai.core.tool_protocol import ToolResult
+from master_prep_ai.core.trace import build_trace_metadata
 
 
 async def _collect_bus_events(bus: StreamBus) -> tuple[list[StreamEvent], asyncio.Task[Any]]:
@@ -31,7 +31,7 @@ async def test_native_tool_loop_executes_parallel_tool_calls(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "deeptutor.agents.chat.agentic_pipeline.get_llm_config",
+        "master_prep_ai.agents.chat.agentic_pipeline.get_llm_config",
         lambda: SimpleNamespace(
             binding="openai", model="gpt-test", api_key="k", base_url="u", api_version=None
         ),
@@ -65,7 +65,7 @@ async def test_native_tool_loop_executes_parallel_tool_calls(
 
     registry = FakeRegistry()
     monkeypatch.setattr(
-        "deeptutor.agents.chat.agentic_pipeline.get_tool_registry", lambda: registry
+        "master_prep_ai.agents.chat.agentic_pipeline.get_tool_registry", lambda: registry
     )
 
     pipeline = AgenticChatPipeline(language="en")
@@ -168,7 +168,7 @@ async def test_execute_tool_call_streams_retrieve_progress_for_rag(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "deeptutor.agents.chat.agentic_pipeline.get_llm_config",
+        "master_prep_ai.agents.chat.agentic_pipeline.get_llm_config",
         lambda: SimpleNamespace(
             binding="openai", model="gpt-test", api_key="k", base_url="u", api_version=None
         ),
@@ -194,7 +194,7 @@ async def test_execute_tool_call_streams_retrieve_progress_for_rag(
 
     registry = FakeRegistry()
     monkeypatch.setattr(
-        "deeptutor.agents.chat.agentic_pipeline.get_tool_registry", lambda: registry
+        "master_prep_ai.agents.chat.agentic_pipeline.get_tool_registry", lambda: registry
     )
 
     pipeline = AgenticChatPipeline(language="en")
@@ -400,7 +400,7 @@ async def test_native_rag_call_uses_system_selected_kb_not_llm_args(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "deeptutor.agents.chat.agentic_pipeline.get_llm_config",
+        "master_prep_ai.agents.chat.agentic_pipeline.get_llm_config",
         lambda: SimpleNamespace(
             binding="openai", model="gpt-test", api_key="k", base_url="u", api_version=None
         ),
@@ -442,7 +442,7 @@ async def test_native_rag_call_uses_system_selected_kb_not_llm_args(
 
     registry = FakeRegistry()
     monkeypatch.setattr(
-        "deeptutor.agents.chat.agentic_pipeline.get_tool_registry", lambda: registry
+        "master_prep_ai.agents.chat.agentic_pipeline.get_tool_registry", lambda: registry
     )
 
     pipeline = AgenticChatPipeline(language="en")
@@ -520,7 +520,7 @@ async def test_native_tool_loop_caps_parallel_tool_calls_at_eight(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     monkeypatch.setattr(
-        "deeptutor.agents.chat.agentic_pipeline.get_llm_config",
+        "master_prep_ai.agents.chat.agentic_pipeline.get_llm_config",
         lambda: SimpleNamespace(
             binding="openai", model="gpt-test", api_key="k", base_url="u", api_version=None
         ),
@@ -550,7 +550,7 @@ async def test_native_tool_loop_caps_parallel_tool_calls_at_eight(
 
     registry = FakeRegistry()
     monkeypatch.setattr(
-        "deeptutor.agents.chat.agentic_pipeline.get_tool_registry", lambda: registry
+        "master_prep_ai.agents.chat.agentic_pipeline.get_tool_registry", lambda: registry
     )
 
     pipeline = AgenticChatPipeline(language="en")
