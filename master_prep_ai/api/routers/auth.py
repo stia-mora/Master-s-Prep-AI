@@ -41,6 +41,15 @@ async def register_first_admin(payload: AuthCredentials, response: Response) -> 
     return {"user": user.to_dict()}
 
 
+@router.post("/register")
+async def register(payload: AuthCredentials, response: Response) -> dict[str, object]:
+    store = get_auth_store()
+    user = store.create_user(payload.email, payload.password, payload.display_name)
+    token = store.create_session(user.user_id)
+    issue_cookie(response, token)
+    return {"user": user.to_dict()}
+
+
 @router.post("/login")
 async def login(payload: AuthCredentials, response: Response) -> dict[str, object]:
     store = get_auth_store()

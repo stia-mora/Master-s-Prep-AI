@@ -161,6 +161,30 @@ class AuthStore:
         self.assign_legacy_data(user_id)
         return AuthUser(user_id=user_id, email=email, display_name=display_name.strip() or email.split("@")[0], role="admin")
 
+    def create_user(self, email: str, password: str, display_name: str = "") -> AuthUser:
+        email = _normalize_email(email)
+        _validate_email(email)
+        if len(password or "") < 8:
+            raise HTTPException(status_code=400, detail="Password must be at least 8 characters")
+        if not self.has_users():
+            raise HTTPException(status_code=409, detail="Create the first administrator before registering student accounts")
+        now = _utc_now()
+        user_id = f"user_{uuid.uuid4().hex}"
+        name = display_name.strip() or email.split("@")[0]
+        try:
+            with self._connect() as conn:
+                conn.execute(
+                    """
+                    INSERT INTO app_user (user_id, email, display_name, password_hash, role, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, 'student', ?, ?)
+                    """,
+                    (user_id, email, name, _hash_password(password), now, now),
+                )
+                conn.commit()
+        except sqlite3.IntegrityError:
+            raise HTTPException(status_code=409, detail="Email already registered") from None
+        return AuthUser(user_id=user_id, email=email, display_name=name, role="student")
+
     def authenticate(self, email: str, password: str) -> AuthUser | None:
         email = _normalize_email(email)
         with self._connect() as conn:

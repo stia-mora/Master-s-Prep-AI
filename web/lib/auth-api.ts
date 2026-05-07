@@ -36,6 +36,13 @@ export function login(email: string, password: string): Promise<{ user: AuthUser
   });
 }
 
+export function register(input: { email: string; password: string; display_name?: string }): Promise<{ user: AuthUser }> {
+  return authRequest<{ user: AuthUser }>("/api/v1/auth/register", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
 export function registerFirstAdmin(input: { email: string; password: string; display_name?: string }): Promise<{ user: AuthUser }> {
   return authRequest<{ user: AuthUser }>("/api/v1/auth/register-first-admin", {
     method: "POST",

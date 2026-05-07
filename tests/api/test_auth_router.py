@@ -59,6 +59,37 @@ def test_first_admin_registers_once_and_login_cookie_roundtrip(monkeypatch):
     assert client.get("/api/v1/auth/me").json()["user"]["email"] == "admin@example.com"
 
 
+def test_student_registration_requires_existing_admin_and_sets_cookie(monkeypatch):
+    client = _client(monkeypatch)
+
+    no_admin = client.post(
+        "/api/v1/auth/register",
+        json={"email": "student@example.com", "password": "password123", "display_name": "Student"},
+    )
+    assert no_admin.status_code == 409
+
+    client.post(
+        "/api/v1/auth/register-first-admin",
+        json={"email": "admin@example.com", "password": "password123", "display_name": "Admin"},
+    )
+    client.post("/api/v1/auth/logout")
+
+    created = client.post(
+        "/api/v1/auth/register",
+        json={"email": "Student@Example.com", "password": "password123", "display_name": "Student"},
+    )
+    assert created.status_code == 200
+    assert created.json()["user"]["email"] == "student@example.com"
+    assert created.json()["user"]["role"] == "student"
+    assert client.cookies.get("master_prep_ai_session")
+    assert client.get("/api/v1/auth/me").json()["user"]["role"] == "student"
+
+    duplicate = client.post(
+        "/api/v1/auth/register",
+        json={"email": "student@example.com", "password": "password123", "display_name": "Again"},
+    )
+    assert duplicate.status_code == 409
+
 def test_auth_store_cache_is_keyed_by_db_path(monkeypatch):
     root = Path("tests") / "auth_runtime"
     root.mkdir(parents=True, exist_ok=True)

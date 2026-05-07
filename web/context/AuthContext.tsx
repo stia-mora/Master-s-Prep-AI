@@ -60,7 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     } catch {
       setUser(null);
       const bootstrap = await getBootstrap().catch(() => ({ has_users: true }));
-      if (pathname !== "/login" && pathname !== "/setup") {
+      if (pathname !== "/login" && pathname !== "/setup" && pathname !== "/register") {
         router.replace(bootstrap.has_users ? "/login" : "/setup");
       }
     } finally {
