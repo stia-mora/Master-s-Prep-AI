@@ -26,7 +26,11 @@ from pathlib import Path
 from typing import Literal, cast
 from urllib.parse import quote
 
-from master_prep_ai.auth import get_current_user_id
+try:
+    from master_prep_ai.auth import get_current_user_id
+except ModuleNotFoundError:
+    def get_current_user_id() -> str:
+        return ""
 
 AgentModule = Literal[
     "solve",

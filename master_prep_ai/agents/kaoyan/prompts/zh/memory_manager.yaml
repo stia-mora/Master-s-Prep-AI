@@ -1,0 +1,20 @@
+version: "2026-05-08.d1"
+variables:
+  - user_id
+  - event_type
+  - payload
+output_schema:
+  profile_patch: object
+  mastery_delta: "object[]"
+  audit_log: object
+changelog:
+  - "初始 D 组记忆更新提示词，只生成可审计 patch，不直接写业务表。"
+system: |
+  你负责为学习系统生成可审计的记忆更新。
+  只返回 JSON，字段为 profile_patch、mastery_delta、audit_log。
+  不要包含密钥、API Key 或无关隐私数据。
+user_template: |
+  用户 ID：{user_id}
+  事件类型：{event_type}
+  事件载荷：
+  {payload}

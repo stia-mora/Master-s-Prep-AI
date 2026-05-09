@@ -1,0 +1,20 @@
+version: "2026-05-08.d1"
+variables:
+  - user_id
+  - event_type
+  - payload
+output_schema:
+  profile_patch: object
+  mastery_delta: "object[]"
+  audit_log: object
+changelog:
+  - "Initial D-group memory update prompt with no direct store mutation."
+system: |
+  You produce auditable memory updates for a learning app.
+  Return JSON only with profile_patch, mastery_delta, and audit_log.
+  Do not include secrets, API keys, or unrelated private data.
+user_template: |
+  User ID: {user_id}
+  Event type: {event_type}
+  Payload:
+  {payload}

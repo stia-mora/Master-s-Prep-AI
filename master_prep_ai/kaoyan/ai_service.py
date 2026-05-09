@@ -8,6 +8,7 @@ import os
 import re
 from typing import Any
 
+from .agent_adapters import math_eval, memory_update, route_model, socratic_next_turn
 from .learning_store import DEFAULT_USER_ID, KaoyanLearningStore
 
 _JSON_RE = re.compile(r"\{.*\}", re.DOTALL)
@@ -32,14 +33,21 @@ def _extract_json(text: str) -> dict[str, Any]:
 
 async def call_llm_complete(prompt: str, system_prompt: str, image_data: str | None = None) -> tuple[str, str]:
     """Import the optional LLM stack lazily so API startup can fall back cleanly."""
-    from master_prep_ai.services.llm import complete, get_llm_config
+    from master_prep_ai.services.llm import complete
 
-    model = ""
-    try:
-        model = str(get_llm_config().model or "")
-    except Exception:
-        model = ""
-    response = await complete(prompt, system_prompt=system_prompt, max_retries=0, image_data=image_data)
+    route = route_model("kaoyan_ai_service", latency_budget="medium", cost_budget="medium")
+    if route.get("fallback"):
+        raise RuntimeError(str(route.get("reason") or "LLM route is in fallback mode"))
+    model = str(route.get("model") or "")
+    binding = str(route.get("binding") or route.get("provider") or "")
+    response = await complete(
+        prompt,
+        system_prompt=system_prompt,
+        model=model or None,
+        binding=binding or None,
+        max_retries=0,
+        image_data=image_data,
+    )
     return str(response or ""), model
 
 
@@ -119,3 +127,13 @@ class KaoyanAIService:
             error_message=error,
             user_id=user_id,
         )
+
+
+__all__ = [
+    "KaoyanAIService",
+    "call_llm_complete",
+    "math_eval",
+    "memory_update",
+    "route_model",
+    "socratic_next_turn",
+]

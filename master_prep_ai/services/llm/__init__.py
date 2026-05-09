@@ -81,17 +81,42 @@ from .exceptions import (
     LLMRateLimitError,
     LLMTimeoutError,
 )
-from .factory import (
-    API_PROVIDER_PRESETS,
-    DEFAULT_EXPONENTIAL_BACKOFF,
-    DEFAULT_MAX_RETRIES,
-    DEFAULT_RETRY_DELAY,
-    LOCAL_PROVIDER_PRESETS,
-    complete,
-    fetch_models,
-    get_provider_presets,
-    stream,
-)
+from .routing_service import route_model
+
+try:
+    from .factory import (
+        API_PROVIDER_PRESETS,
+        DEFAULT_EXPONENTIAL_BACKOFF,
+        DEFAULT_MAX_RETRIES,
+        DEFAULT_RETRY_DELAY,
+        LOCAL_PROVIDER_PRESETS,
+        complete,
+        fetch_models,
+        get_provider_presets,
+        stream,
+    )
+except ModuleNotFoundError as _factory_import_error:
+    _factory_import_error_message = str(_factory_import_error)
+    API_PROVIDER_PRESETS = {}
+    LOCAL_PROVIDER_PRESETS = {}
+    DEFAULT_MAX_RETRIES = 0
+    DEFAULT_RETRY_DELAY = 0.0
+    DEFAULT_EXPONENTIAL_BACKOFF = False
+
+    async def complete(*_args, **_kwargs):
+        raise LLMConfigError(f"LLM factory dependencies are unavailable: {_factory_import_error_message}")
+
+    async def stream(*_args, **_kwargs):
+        if False:
+            yield ""
+        raise LLMConfigError(f"LLM factory dependencies are unavailable: {_factory_import_error_message}")
+
+    async def fetch_models(*_args, **_kwargs):
+        raise LLMConfigError(f"LLM factory dependencies are unavailable: {_factory_import_error_message}")
+
+    def get_provider_presets():
+        return {"api": API_PROVIDER_PRESETS, "local": LOCAL_PROVIDER_PRESETS}
+
 from .multimodal import MultimodalResult, prepare_multimodal_messages
 from .utils import (
     build_auth_headers,
@@ -142,6 +167,7 @@ __all__ = [
     "complete",
     "stream",
     "fetch_models",
+    "route_model",
     "get_provider_presets",
     "API_PROVIDER_PRESETS",
     "LOCAL_PROVIDER_PRESETS",
