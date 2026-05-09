@@ -115,18 +115,12 @@ export interface PracticeSession {
   session_id: string;
   title: string;
   session_type: string;
-<<<<<<< HEAD
   mode: string; // Requested: Alias for session_type
   knowledge_id: string;
   question_ids: string[];
   questions: ContentQuestion[];
   question_items: ContentQuestion[]; // Requested: Alias for questions
   status: "active" | "submitted" | "archived" | string;
-=======
-  knowledge_id: string;
-  question_ids: string[];
-  questions: ContentQuestion[];
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
   ai_metadata?: Record<string, unknown>;
 }
 
@@ -145,25 +139,17 @@ export interface PracticeAnswerResult {
 export interface PracticeResult {
   record_id: string;
   practice_id: string;
-<<<<<<< HEAD
   score: number; // Requested: Derived from accuracy
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
   total_count: number;
   correct_count: number;
   accuracy: number;
   analysis_summary: string;
   next_actions: string[];
   wrong_question_ids: string[];
-<<<<<<< HEAD
   mastery_delta?: Record<string, number>; // Requested: Knowledge ID -> Mastery change
   ai_metadata?: { ai_used?: boolean; message?: string };
   answers: PracticeAnswerResult[];
   answer_records: PracticeAnswerResult[]; // Requested: Alias for answers
-=======
-  ai_metadata?: { ai_used?: boolean; message?: string };
-  answers: PracticeAnswerResult[];
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
 }
 
 export interface ProfileDraft {

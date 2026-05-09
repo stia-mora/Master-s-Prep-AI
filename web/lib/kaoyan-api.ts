@@ -117,10 +117,7 @@ export function createKaoyanChatContext(input: {
 export function createPracticeSession(input: {
   session_type?: "special" | "wrong_retry" | "similar";
   knowledge_id?: string;
-<<<<<<< HEAD
   task_id?: string;
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
   source_question_id?: string;
   question_type?: string;
   difficulty_level?: number;

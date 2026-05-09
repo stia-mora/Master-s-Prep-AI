@@ -319,7 +319,6 @@ class KaoyanPracticeService:
         return results
 
     async def _grade_free_response(self, question: dict[str, Any], user_answer: str, image_data_url: str, user_id: str) -> dict[str, Any]:
-<<<<<<< HEAD
         # Pre-call logic for Member D's math_eval
         # If math_eval is available, it should be called here for high-precision math grading.
         # For now, we use a mock adapter or the built-in LLM grader.
@@ -331,9 +330,6 @@ class KaoyanPracticeService:
         math_result = await mock_math_eval(question, user_answer, image_data_url)
         if math_result:
             return math_result
-
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
         correct_answer = str(question.get("answer") or "")
         fallback_correct = is_correct_answer(user_answer, correct_answer)
         fallback_reason = "已掌握" if fallback_correct else self._fallback_error_reason(user_answer, correct_answer)

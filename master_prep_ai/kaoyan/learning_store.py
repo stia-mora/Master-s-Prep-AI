@@ -516,14 +516,10 @@ class KaoyanLearningStore:
             (score, 1 if is_correct else 0, 0 if is_correct else 1, now, now, user_id, knowledge_id),
         )
 
-<<<<<<< HEAD
     def get_mastery_score(self, knowledge_id: str, user_id: str = DEFAULT_USER_ID) -> float:
         with self._connect() as conn:
             row = conn.execute("SELECT mastery_score FROM mastery_record WHERE user_id = ? AND knowledge_id = ?", (user_id, knowledge_id)).fetchone()
         return float(row["mastery_score"]) if row else 50.0
-
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
     def _upsert_wrong_question(self, conn: sqlite3.Connection, item: dict[str, Any], user_id: str, now: str) -> None:
         next_review = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
         conn.execute(
