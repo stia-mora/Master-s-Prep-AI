@@ -1,0 +1,17 @@
+# ============================================
+# Master Prep AI Development Dependencies
+# ============================================
+# Mirrors pyproject.toml `[project.optional-dependencies].dev`.
+# Keep in sync with pyproject.toml when adding/updating dependencies.
+#
+# Preferred install (from a source clone): pip install -e ".[dev]"
+# Use this file for Docker/CI when pyproject.toml/source code aren't yet available.
+
+-r server.txt
+
+pytest>=7.0.0
+pytest-asyncio>=0.23.0
+pre-commit>=3.0.0
+ruff>=0.8.0
+safety<3.0.0
+bandit>=1.8.0
