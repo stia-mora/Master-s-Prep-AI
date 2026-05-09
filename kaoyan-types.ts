@@ -7,6 +7,9 @@ export interface KaoyanProfile {
   target_score: number;
   baseline_level: string;
   weak_modules: string[];
+  subjects?: string[];
+  stage?: string;
+  preferences?: Record<string, unknown>;
 }
 
 export interface KnowledgeNode {
@@ -81,9 +84,12 @@ export interface PlanTask {
   description: string;
   estimated_minutes: number;
   due_at: string;
+  due_date?: string;
   status: "pending" | "in_progress" | "completed" | "skipped" | string;
   priority_score: number;
+  priority?: number;
   related_knowledge_ids: string[];
+  knowledge_ids?: string[];
 }
 
 export interface StudyPlan {
@@ -109,24 +115,20 @@ export interface DashboardSummary {
   mastery_average: number;
   mastery_distribution: { low: number; medium: number; high: number };
   profile?: KaoyanProfile | null;
+  today_tasks?: PlanTask[];
+  weak_modules?: string[];
+  weak_knowledge_ids?: string[];
+  recent_diagnostic_report?: DiagnosticReport | null;
+  active_plan?: Omit<StudyPlan, "tasks"> | null;
 }
 
 export interface PracticeSession {
   session_id: string;
   title: string;
   session_type: string;
-<<<<<<< HEAD
-  mode: string; // Requested: Alias for session_type
   knowledge_id: string;
   question_ids: string[];
   questions: ContentQuestion[];
-  question_items: ContentQuestion[]; // Requested: Alias for questions
-  status: "active" | "submitted" | "archived" | string;
-=======
-  knowledge_id: string;
-  question_ids: string[];
-  questions: ContentQuestion[];
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
   ai_metadata?: Record<string, unknown>;
 }
 
@@ -145,25 +147,14 @@ export interface PracticeAnswerResult {
 export interface PracticeResult {
   record_id: string;
   practice_id: string;
-<<<<<<< HEAD
-  score: number; // Requested: Derived from accuracy
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
   total_count: number;
   correct_count: number;
   accuracy: number;
   analysis_summary: string;
   next_actions: string[];
   wrong_question_ids: string[];
-<<<<<<< HEAD
-  mastery_delta?: Record<string, number>; // Requested: Knowledge ID -> Mastery change
   ai_metadata?: { ai_used?: boolean; message?: string };
   answers: PracticeAnswerResult[];
-  answer_records: PracticeAnswerResult[]; // Requested: Alias for answers
-=======
-  ai_metadata?: { ai_used?: boolean; message?: string };
-  answers: PracticeAnswerResult[];
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
 }
 
 export interface ProfileDraft {
@@ -193,6 +184,7 @@ export interface DiagnosticReport {
   report_id: string;
   user_id: string;
   session_id: string;
+  subject?: string;
   mode: "light" | "deep" | string;
   profile_snapshot: Partial<KaoyanProfile>;
   answer_summary: {
@@ -202,6 +194,14 @@ export interface DiagnosticReport {
     answers?: PracticeAnswerResult[];
   };
   profile_draft: ProfileDraft;
+  weak_knowledge_ids?: string[];
+  score_summary?: {
+    total?: number;
+    correct?: number;
+    wrong?: number;
+    accuracy?: number;
+  };
+  recommendations?: string[];
   summary: string;
   confirmed: boolean;
   created_at: string;

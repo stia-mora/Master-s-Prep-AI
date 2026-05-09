@@ -48,10 +48,57 @@ def _json_loads(value: str | None, default: Any) -> Any:
 
 def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
     data = {key: row[key] for key in row.keys()}
-    for key in ["weak_modules_json", "payload_json", "related_knowledge_ids_json", "question_ids_json", "ai_metadata_json"]:
+    list_json_keys = {
+        "weak_modules_json",
+        "related_knowledge_ids_json",
+        "question_ids_json",
+        "subjects_json",
+        "weak_knowledge_ids_json",
+        "recommendations_json",
+    }
+    for key in [
+        "weak_modules_json",
+        "payload_json",
+        "related_knowledge_ids_json",
+        "question_ids_json",
+        "ai_metadata_json",
+        "subjects_json",
+        "preferences_json",
+        "weak_knowledge_ids_json",
+        "score_summary_json",
+        "recommendations_json",
+    ]:
         if key in data:
-            data[key.replace("_json", "")] = _json_loads(data.pop(key), [] if key.endswith("ids_json") or key == "weak_modules_json" else {})
+            data[key.replace("_json", "")] = _json_loads(
+                data.pop(key), [] if key in list_json_keys else {}
+            )
+    if "related_knowledge_ids" in data:
+        data["knowledge_ids"] = data["related_knowledge_ids"]
+    if "due_at" in data:
+        data["due_date"] = data["due_at"]
+    if "priority_score" in data:
+        data["priority"] = data["priority_score"]
+    if "ai_generated" in data and "ai_status" in data:
+        data["ai_metadata"] = {
+            "ai_used": bool(data.get("ai_generated")),
+            "status": data.get("ai_status", ""),
+            "message": data.get("ai_message", ""),
+        }
     return data
+
+
+def _normalize_task_status(status: str) -> str:
+    aliases = {
+        "todo": "pending",
+        "pending": "pending",
+        "in_progress": "in_progress",
+        "doing": "in_progress",
+        "done": "completed",
+        "completed": "completed",
+        "skipped": "skipped",
+        "deferred": "skipped",
+    }
+    return aliases.get(str(status or "").strip().lower(), "pending")
 
 
 class KaoyanLearningStore:
@@ -81,6 +128,9 @@ class KaoyanLearningStore:
                     target_score INTEGER NOT NULL DEFAULT 120,
                     baseline_level TEXT NOT NULL DEFAULT '基础',
                     weak_modules_json TEXT NOT NULL DEFAULT '[]',
+                    subjects_json TEXT NOT NULL DEFAULT '[]',
+                    stage TEXT NOT NULL DEFAULT '',
+                    preferences_json TEXT NOT NULL DEFAULT '{}',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL
                 );
@@ -217,6 +267,9 @@ class KaoyanLearningStore:
                     profile_snapshot_json TEXT NOT NULL DEFAULT '{}',
                     answer_summary_json TEXT NOT NULL DEFAULT '{}',
                     profile_draft_json TEXT NOT NULL DEFAULT '{}',
+                    weak_knowledge_ids_json TEXT NOT NULL DEFAULT '[]',
+                    score_summary_json TEXT NOT NULL DEFAULT '{}',
+                    recommendations_json TEXT NOT NULL DEFAULT '[]',
                     summary TEXT NOT NULL DEFAULT '',
                     confirmed INTEGER NOT NULL DEFAULT 0,
                     created_at TEXT NOT NULL,
@@ -242,18 +295,49 @@ class KaoyanLearningStore:
                 CREATE INDEX IF NOT EXISTS idx_diagnostic_report_user ON diagnostic_report(user_id, created_at DESC);
                 """
             )
+            self._ensure_column(conn, "user_profile", "subjects_json", "TEXT NOT NULL DEFAULT '[]'")
+            self._ensure_column(conn, "user_profile", "stage", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "user_profile", "preferences_json", "TEXT NOT NULL DEFAULT '{}'")
+            self._ensure_column(
+                conn,
+                "diagnostic_report",
+                "weak_knowledge_ids_json",
+                "TEXT NOT NULL DEFAULT '[]'",
+            )
+            self._ensure_column(
+                conn,
+                "diagnostic_report",
+                "score_summary_json",
+                "TEXT NOT NULL DEFAULT '{}'",
+            )
+            self._ensure_column(
+                conn,
+                "diagnostic_report",
+                "recommendations_json",
+                "TEXT NOT NULL DEFAULT '[]'",
+            )
             conn.commit()
+
+    def _ensure_column(
+        self, conn: sqlite3.Connection, table: str, column: str, definition: str
+    ) -> None:
+        columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
+        if column not in columns:
+            conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
 
     def upsert_profile(self, payload: dict[str, Any], user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
         now = utc_now()
         weak_modules = payload.get("weak_modules") or payload.get("weakModules") or []
+        subjects = payload.get("subjects") or []
+        preferences = payload.get("preferences") or {}
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO user_profile (
                     user_id, target_school, target_major, exam_date, daily_minutes,
-                    target_score, baseline_level, weak_modules_json, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    target_score, baseline_level, weak_modules_json, subjects_json, stage,
+                    preferences_json, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ON CONFLICT(user_id) DO UPDATE SET
                     target_school = excluded.target_school,
                     target_major = excluded.target_major,
@@ -262,6 +346,9 @@ class KaoyanLearningStore:
                     target_score = excluded.target_score,
                     baseline_level = excluded.baseline_level,
                     weak_modules_json = excluded.weak_modules_json,
+                    subjects_json = excluded.subjects_json,
+                    stage = excluded.stage,
+                    preferences_json = excluded.preferences_json,
                     updated_at = excluded.updated_at
                 """,
                 (
@@ -273,6 +360,9 @@ class KaoyanLearningStore:
                     int(payload.get("target_score") or 120),
                     str(payload.get("baseline_level", "基础")),
                     _json_dumps(weak_modules),
+                    _json_dumps(subjects),
+                    str(payload.get("stage", "")),
+                    _json_dumps(preferences),
                     now,
                     now,
                 ),
@@ -358,22 +448,15 @@ class KaoyanLearningStore:
             ).fetchall()
         return [_row_to_dict(row) for row in rows]
 
-<<<<<<< HEAD
-    def get_task(self, task_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
-        with self._connect() as conn:
-            row = conn.execute("SELECT * FROM plan_task WHERE task_id = ? AND user_id = ?", (task_id, user_id)).fetchone()
-        return _row_to_dict(row) if row else None
-
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
     def update_task_status(self, task_id: str, status: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
         now = utc_now()
+        normalized_status = _normalize_task_status(status)
         with self._connect() as conn:
             before = conn.execute("SELECT * FROM plan_task WHERE task_id = ? AND user_id = ?", (task_id, user_id)).fetchone()
             if before is None:
                 return None
             before_dict = _row_to_dict(before)
-            conn.execute("UPDATE plan_task SET status = ?, updated_at = ? WHERE task_id = ? AND user_id = ?", (status, now, task_id, user_id))
+            conn.execute("UPDATE plan_task SET status = ?, updated_at = ? WHERE task_id = ? AND user_id = ?", (normalized_status, now, task_id, user_id))
             after = conn.execute("SELECT * FROM plan_task WHERE task_id = ? AND user_id = ?", (task_id, user_id)).fetchone()
             conn.execute(
                 "INSERT INTO plan_task_version (version_id, task_id, user_id, before_json, after_json, reason, created_at) VALUES (?, ?, ?, ?, ?, ?, ?)",
@@ -516,14 +599,6 @@ class KaoyanLearningStore:
             (score, 1 if is_correct else 0, 0 if is_correct else 1, now, now, user_id, knowledge_id),
         )
 
-<<<<<<< HEAD
-    def get_mastery_score(self, knowledge_id: str, user_id: str = DEFAULT_USER_ID) -> float:
-        with self._connect() as conn:
-            row = conn.execute("SELECT mastery_score FROM mastery_record WHERE user_id = ? AND knowledge_id = ?", (user_id, knowledge_id)).fetchone()
-        return float(row["mastery_score"]) if row else 50.0
-
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
     def _upsert_wrong_question(self, conn: sqlite3.Connection, item: dict[str, Any], user_id: str, now: str) -> None:
         next_review = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
         conn.execute(
@@ -644,9 +719,23 @@ class KaoyanLearningStore:
             wrong_count = conn.execute("SELECT count(*) FROM wrong_question WHERE user_id = ? AND review_status != 'mastered'", (user_id,)).fetchone()[0]
             review_count = conn.execute("SELECT count(*) FROM review_queue WHERE user_id = ? AND status IN ('pending', 'failed')", (user_id,)).fetchone()[0]
             mastery_rows = conn.execute("SELECT mastery_score FROM mastery_record WHERE user_id = ?", (user_id,)).fetchall()
+            weak_rows = conn.execute(
+                """
+                SELECT knowledge_id, wrong_count
+                FROM wrong_question
+                WHERE user_id = ? AND review_status != 'mastered'
+                ORDER BY wrong_count DESC, last_wrong_at DESC
+                LIMIT 8
+                """,
+                (user_id,),
+            ).fetchall()
         total = int(tasks["total"] or 0)
         completed = int(tasks["completed"] or 0)
         scores = [float(row["mastery_score"]) for row in mastery_rows]
+        today_tasks = self.list_today_tasks(user_id)
+        profile = self.get_profile(user_id)
+        latest_report = self.list_diagnostic_reports(user_id, limit=1, offset=0)
+        active_plan = self.get_active_plan(user_id)
         return {
             "task_total": total,
             "task_completed": completed,
@@ -661,6 +750,11 @@ class KaoyanLearningStore:
                 "medium": sum(1 for score in scores if 50 <= score < 75),
                 "high": sum(1 for score in scores if score >= 75),
             },
+            "today_tasks": today_tasks,
+            "weak_modules": (profile or {}).get("weak_modules", []),
+            "weak_knowledge_ids": [str(row["knowledge_id"]) for row in weak_rows],
+            "recent_diagnostic_report": latest_report[0] if latest_report else None,
+            "active_plan": active_plan,
         }
 
     def create_diagnostic_report(
@@ -673,16 +767,23 @@ class KaoyanLearningStore:
         answer_summary: dict[str, Any],
         profile_draft: dict[str, Any],
         summary: str,
+        weak_knowledge_ids: list[str] | None = None,
+        score_summary: dict[str, Any] | None = None,
+        recommendations: list[str] | None = None,
     ) -> dict[str, Any]:
         now = utc_now()
         report_id = f"diagrep_{uuid.uuid4().hex[:12]}"
+        report_weak_ids = weak_knowledge_ids or self._derive_weak_knowledge_ids(answer_summary)
+        report_score_summary = score_summary or self._derive_score_summary(answer_summary)
+        report_recommendations = recommendations or self._derive_recommendations(profile_draft)
         with self._connect() as conn:
             conn.execute(
                 """
                 INSERT INTO diagnostic_report (
                     report_id, user_id, session_id, mode, profile_snapshot_json,
-                    answer_summary_json, profile_draft_json, summary, confirmed, created_at, updated_at
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
+                    answer_summary_json, profile_draft_json, weak_knowledge_ids_json,
+                    score_summary_json, recommendations_json, summary, confirmed, created_at, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, ?, ?)
                 """,
                 (
                     report_id,
@@ -692,6 +793,9 @@ class KaoyanLearningStore:
                     _json_dumps(profile_snapshot),
                     _json_dumps(answer_summary),
                     _json_dumps(profile_draft),
+                    _json_dumps(report_weak_ids),
+                    _json_dumps(report_score_summary),
+                    _json_dumps(report_recommendations),
                     summary,
                     now,
                     now,
@@ -721,6 +825,20 @@ class KaoyanLearningStore:
             ).fetchone()
         return self._diagnostic_report_row_to_dict(row) if row else None
 
+    def get_latest_confirmed_diagnostic_report(self, user_id: str) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT *
+                FROM diagnostic_report
+                WHERE user_id = ? AND confirmed = 1
+                ORDER BY updated_at DESC, created_at DESC
+                LIMIT 1
+                """,
+                (user_id,),
+            ).fetchone()
+        return self._diagnostic_report_row_to_dict(row) if row else None
+
     def confirm_diagnostic_report(self, report_id: str, user_id: str) -> dict[str, Any] | None:
         now = utc_now()
         with self._connect() as conn:
@@ -740,8 +858,43 @@ class KaoyanLearningStore:
         data["profile_snapshot"] = _json_loads(data.pop("profile_snapshot_json", "{}"), {})
         data["answer_summary"] = _json_loads(data.pop("answer_summary_json", "{}"), {})
         data["profile_draft"] = _json_loads(data.pop("profile_draft_json", "{}"), {})
+        data["weak_knowledge_ids"] = _json_loads(data.pop("weak_knowledge_ids_json", "[]"), [])
+        data["score_summary"] = _json_loads(data.pop("score_summary_json", "{}"), {})
+        data["recommendations"] = _json_loads(data.pop("recommendations_json", "[]"), [])
         data["confirmed"] = bool(data.get("confirmed"))
+        subjects = data["profile_snapshot"].get("subjects") or []
+        data["subject"] = data["profile_snapshot"].get("subject") or (subjects[0] if subjects else "math")
         return data
+
+    def _derive_weak_knowledge_ids(self, answer_summary: dict[str, Any]) -> list[str]:
+        weak_ids: list[str] = []
+        for item in answer_summary.get("answers") or []:
+            if not isinstance(item, dict) or item.get("is_correct"):
+                continue
+            knowledge_id = str(item.get("knowledge_id") or "")
+            if knowledge_id and knowledge_id not in weak_ids:
+                weak_ids.append(knowledge_id)
+        return weak_ids[:12]
+
+    def _derive_score_summary(self, answer_summary: dict[str, Any]) -> dict[str, Any]:
+        total = int(answer_summary.get("total") or 0)
+        correct = int(answer_summary.get("correct") or 0)
+        accuracy = float(answer_summary.get("accuracy") or (correct / total if total else 0.0))
+        return {
+            "total": total,
+            "correct": correct,
+            "wrong": max(0, total - correct),
+            "accuracy": accuracy,
+        }
+
+    def _derive_recommendations(self, profile_draft: dict[str, Any]) -> list[str]:
+        plan_focus = profile_draft.get("plan_focus") if isinstance(profile_draft, dict) else []
+        if isinstance(plan_focus, list) and plan_focus:
+            return [str(item) for item in plan_focus[:6]]
+        weak_modules = profile_draft.get("weak_modules") if isinstance(profile_draft, dict) else []
+        if isinstance(weak_modules, list) and weak_modules:
+            return [f"Prioritize review for {item}" for item in weak_modules[:6]]
+        return []
     def log_ai_action(self, *, action_type: str, prompt: str, model: str = "", status: str, response_text: str = "", error_message: str = "", payload: dict[str, Any] | None = None, user_id: str = DEFAULT_USER_ID) -> None:
         with self._connect() as conn:
             conn.execute(

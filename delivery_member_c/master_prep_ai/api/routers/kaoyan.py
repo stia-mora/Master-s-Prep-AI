@@ -37,10 +37,7 @@ class DiagnosticSessionRequest(BaseModel):
 class PracticeSessionRequest(BaseModel):
     session_type: Literal["special", "wrong_retry", "similar"] = "special"
     knowledge_id: str | None = None
-<<<<<<< HEAD
     task_id: str | None = None
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
     source_question_id: str | None = None
     question_type: str | None = None
     difficulty_level: int | None = Field(default=None, ge=1, le=5)
@@ -115,29 +112,17 @@ def _learning():
 
 
 @router.get("/content/health")
-<<<<<<< HEAD
 async def content_health(user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
-=======
-async def content_health() -> dict[str, Any]:
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
     return _content().health()
 
 
 @router.get("/content/knowledge-tree")
-<<<<<<< HEAD
 async def get_knowledge_tree(user: AuthUser = Depends(require_current_user)) -> list[dict[str, Any]]:
-=======
-async def get_knowledge_tree() -> list[dict[str, Any]]:
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
     return _content().knowledge_tree()
 
 
 @router.get("/content/knowledge/{knowledge_id}")
-<<<<<<< HEAD
 async def get_knowledge(knowledge_id: str, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
-=======
-async def get_knowledge(knowledge_id: str) -> dict[str, Any]:
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
     detail = _content().get_knowledge(knowledge_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Knowledge point not found")
@@ -269,10 +254,7 @@ async def create_practice_session(request: PracticeSessionRequest, user: AuthUse
     session = service.create_session(
         session_type=request.session_type,
         knowledge_id=request.knowledge_id,
-<<<<<<< HEAD
         task_id=request.task_id,
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
         source_question_id=request.source_question_id,
         question_type=request.question_type,
         difficulty_level=request.difficulty_level,
