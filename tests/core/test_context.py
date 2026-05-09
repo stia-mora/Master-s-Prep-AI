@@ -5,10 +5,10 @@ from __future__ import annotations
 from master_prep_ai.core.context import Attachment, UnifiedContext
 from master_prep_ai.core.errors import (
     ConfigurationError,
-    MasterPrepAIError,
     EnvironmentConfigError,
     LLMContextError,
     LLMServiceError,
+    MasterPrepAIError,
     ServiceError,
     ValidationError,
 )

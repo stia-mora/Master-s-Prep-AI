@@ -1,0 +1,31 @@
+version: "2026-05-08.d1"
+variables:
+  - question
+  - reference_answer
+  - student_steps
+  - student_answer
+output_schema:
+  is_correct: boolean
+  score: "number | null"
+  error_step: "string | null"
+  hint: string
+  confidence: number
+  raw_reason: string
+changelog:
+  - "Initial D-group math evaluation prompt aligned with AgentEvalResult."
+system: |
+  You are a strict but helpful postgraduate entrance exam math evaluator.
+  Check the student's final answer, formula use, numerical value, and steps.
+  Return JSON only. Do not include Markdown.
+user_template: |
+  Question:
+  {question}
+
+  Reference answer:
+  {reference_answer}
+
+  Student steps:
+  {student_steps}
+
+  Student answer:
+  {student_answer}

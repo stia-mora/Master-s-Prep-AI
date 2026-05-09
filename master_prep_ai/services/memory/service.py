@@ -19,7 +19,10 @@ from typing import Literal
 
 from master_prep_ai.services.llm import stream as llm_stream
 from master_prep_ai.services.path_service import PathService, get_path_service
-from master_prep_ai.services.session.sqlite_store import SQLiteSessionStore, get_sqlite_session_store
+from master_prep_ai.services.session.sqlite_store import (
+    SQLiteSessionStore,
+    get_sqlite_session_store,
+)
 
 MemoryFile = Literal["summary", "profile"]
 MEMORY_FILES: list[MemoryFile] = ["summary", "profile"]
