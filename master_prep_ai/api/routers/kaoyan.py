@@ -80,11 +80,20 @@ class PlanReorderRequest(BaseModel):
 class MaterialParseRequest(BaseModel):
     filename: str
     content_type: str = "pdf"
+    raw_text: str | None = None
 
 
 class RagQueryRequest(BaseModel):
-    kb_name: str
+    kb_name: str | None = None
     query: str
+    top_k: int = Field(default=5, ge=1, le=20)
+    filters: dict[str, Any] = Field(default_factory=dict)
+
+
+class ObsidianExportRequest(BaseModel):
+    source_type: Literal["knowledge", "question", "wrong_question", "diagnostic_report"]
+    source_id: str | None = None
+    payload: dict[str, Any] = Field(default_factory=dict)
 
 
 class ExamSimulationRequest(BaseModel):
@@ -116,8 +125,8 @@ async def content_health() -> dict[str, Any]:
 
 
 @router.get("/content/knowledge-tree")
-async def get_knowledge_tree() -> list[dict[str, Any]]:
-    return _content().knowledge_tree()
+async def get_knowledge_tree(subject: str | None = Query(default=None)) -> list[dict[str, Any]]:
+    return _content().knowledge_tree(subject=subject)
 
 
 @router.get("/content/knowledge/{knowledge_id}")
@@ -319,12 +328,17 @@ async def reorder_plan(request: PlanReorderRequest, user: AuthUser = Depends(req
 
 @router.post("/materials/parse")
 async def create_material_parse_task(request: MaterialParseRequest, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
-    return _content().create_material_parse_task(request.filename, request.content_type)
+    return _content().create_material_parse_task(
+        request.filename,
+        request.content_type,
+        user_id=user.user_id,
+        raw_text=request.raw_text,
+    )
 
 
 @router.get("/materials/tasks/{task_id}")
 async def get_material_parse_task(task_id: str, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
-    task = _content().get_material_parse_task(task_id)
+    task = _content().get_material_parse_task(task_id, user_id=user.user_id)
     if task is None:
         raise HTTPException(status_code=404, detail="Task not found")
     return task
@@ -333,7 +347,25 @@ async def get_material_parse_task(task_id: str, user: AuthUser = Depends(require
 @router.post("/rag/query")
 async def query_kaoyan_rag(request: RagQueryRequest, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
     service = KaoyanChatContextService(_content(), user_id=user.user_id)
-    return await service.query_rag(request.kb_name, request.query)
+    return await service.query_rag(
+        request.kb_name,
+        request.query,
+        top_k=request.top_k,
+        filters=request.filters,
+    )
+
+
+@router.post("/obsidian/export")
+async def export_obsidian_markdown(request: ObsidianExportRequest, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    _ = user
+    result = _content().render_obsidian_export(
+        request.source_type,
+        request.source_id,
+        payload=request.payload,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Obsidian export source not found")
+    return result
 
 
 @router.post("/exam/simulation")

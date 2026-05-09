@@ -2,17 +2,32 @@
 
 from __future__ import annotations
 
+from contextlib import closing
 from datetime import datetime, timezone
 from functools import lru_cache
+import json
 import os
 from pathlib import Path
 import re
 import sqlite3
-from typing import Any
 import uuid
+from typing import Any
 
 DEFAULT_USER_ID = "local-user"
 _MATERIAL_PARSE_TASKS: dict[str, dict[str, Any]] = {}
+_CONTENT_TABLES = [
+    "knowledge_points",
+    "questions",
+    "formulas",
+    "mistakes",
+    "review_cards",
+    "lecture_knowledge_nodes",
+    "lecture_chunks",
+    "lecture_formulas",
+    "lecture_mistakes",
+    "lecture_review_cards",
+    "worked_examples",
+]
 
 _REFERENCE_PATTERNS = [
     re.compile(r"\{?#references\s+[\"'][^\"']+[\"']\}?", re.IGNORECASE),
@@ -98,42 +113,225 @@ def _question_rows(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
     return [_question_row_to_dict(row) for row in rows]
 
 
+def _now_iso() -> str:
+    return datetime.now(timezone.utc).isoformat()
+
+
+def _as_int(value: Any, default: int = 0) -> int:
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return default
+
+
+def _compact_text(value: Any, limit: int = 500) -> str:
+    text = clean_content(str(value or "")) or ""
+    text = re.sub(r"\s+", " ", text).strip()
+    if len(text) <= limit:
+        return text
+    return text[:limit].rstrip() + "..."
+
+
+def _unique_strings(values: list[Any]) -> list[str]:
+    seen: set[str] = set()
+    result: list[str] = []
+    for value in values:
+        text = str(value or "").strip()
+        if not text or text in seen:
+            continue
+        seen.add(text)
+        result.append(text)
+    return result
+
+
+def _safe_slug(value: Any, fallback: str = "untitled") -> str:
+    text = str(value or "").strip() or fallback
+    text = re.sub(r"[\\/:*?\"<>|]+", "-", text)
+    text = re.sub(r"\s+", " ", text).strip(" .")
+    return (text or fallback)[:80]
+
+
+def _node_level(node: dict[str, Any]) -> int:
+    explicit = node.get("level")
+    if explicit not in (None, ""):
+        return _as_int(explicit, 1)
+    node_type = str(node.get("node_type") or node.get("module") or "").strip()
+    if node_type == "chapter":
+        return 1
+    if node_type == "section":
+        return 2
+    if node_type == "subsection":
+        return 3
+    if node_type == "knowledge_point":
+        return 4
+    full_path = str(node.get("full_path") or "")
+    if full_path:
+        return max(1, len([part for part in full_path.split(">") if part.strip()]))
+    if node.get("section"):
+        return 3
+    if node.get("chapter"):
+        return 2
+    return 1
+
+
+def _source_refs_for_node(node: dict[str, Any]) -> list[dict[str, Any]]:
+    source_id = str(node.get("knowledge_id") or node.get("id") or "").strip()
+    if not source_id:
+        return []
+    return [
+        {
+            "id": source_id,
+            "title": node.get("knowledge_name") or node.get("title") or source_id,
+            "source_type": "content_db",
+            "source": "math_content.sqlite",
+            "path": node.get("full_path") or node.get("section") or node.get("chapter") or "",
+        }
+    ]
+
+
+def _freeze_knowledge_node(node: dict[str, Any], *, include_children: bool = True) -> dict[str, Any]:
+    item = dict(node)
+    node_id = str(item.get("knowledge_id") or item.get("id") or "").strip()
+    title = str(item.get("knowledge_name") or item.get("title") or node_id).strip()
+    importance = _as_int(item.get("importance_level"), 3)
+    item.setdefault("knowledge_id", node_id)
+    item.setdefault("knowledge_name", title)
+    item["id"] = str(item.get("id") or node_id)
+    item["title"] = str(item.get("title") or title)
+    item["level"] = _node_level(item)
+    item["difficulty"] = _as_int(item.get("difficulty"), importance or 3)
+    item["tags"] = _unique_strings(
+        list(item.get("tags") or [])
+        + [
+            item.get("subject"),
+            item.get("module"),
+            item.get("chapter"),
+            item.get("section"),
+            item.get("node_type"),
+            "core" if _as_int(item.get("is_core")) else "",
+        ]
+    )
+    item["source_refs"] = list(item.get("source_refs") or _source_refs_for_node(item))
+    if include_children:
+        item["children"] = [
+            _freeze_knowledge_node(child, include_children=True)
+            for child in (item.get("children") or [])
+            if isinstance(child, dict)
+        ]
+    else:
+        item.pop("children", None)
+    return item
+
+
+def _detail_summary(knowledge: dict[str, Any], chunks: list[dict[str, Any]]) -> str:
+    for value in [knowledge.get("raw_markdown"), *(chunk.get("raw_markdown") for chunk in chunks)]:
+        summary = _compact_text(value, 600)
+        if summary:
+            return summary
+    return _compact_text(knowledge.get("full_path") or knowledge.get("knowledge_name"), 300)
+
+
+def _freeze_knowledge_detail(detail: dict[str, Any]) -> dict[str, Any]:
+    result = dict(detail)
+    knowledge = _freeze_knowledge_node(dict(result.get("knowledge") or {}), include_children=False)
+    questions = list(result.get("questions") or [])
+    formulas = list(result.get("formulas") or [])
+    mistakes = list(result.get("mistakes") or [])
+    review_cards = list(result.get("review_cards") or [])
+    chunks = list(result.get("chunks") or [])
+    question_ids = [
+        str(item.get("question_id"))
+        for item in questions
+        if isinstance(item, dict) and item.get("question_id")
+    ]
+    source_refs = list(knowledge.get("source_refs") or [])
+    for question in questions:
+        if not isinstance(question, dict):
+            continue
+        qid = question.get("question_id")
+        if qid:
+            source_refs.append(
+                {
+                    "id": qid,
+                    "title": _compact_text(question.get("stem_without_options") or question.get("stem"), 80) or str(qid),
+                    "source_type": "question",
+                    "source": question.get("source") or question.get("source_type") or "math_content.sqlite",
+                    "path": question.get("knowledge_id") or knowledge.get("knowledge_id") or "",
+                }
+            )
+    result.update(
+        {
+            "knowledge": knowledge,
+            "questions": questions,
+            "formulas": formulas,
+            "mistakes": mistakes,
+            "review_cards": review_cards,
+            "chunks": chunks,
+            "id": knowledge["id"],
+            "title": knowledge["title"],
+            "summary": _detail_summary(knowledge, chunks),
+            "prerequisites": list(result.get("prerequisites") or []),
+            "examples": [
+                {
+                    "question_id": item.get("question_id"),
+                    "title": _compact_text(item.get("stem_without_options") or item.get("stem"), 120),
+                    "difficulty": item.get("difficulty_level"),
+                }
+                for item in questions[:3]
+                if isinstance(item, dict)
+            ],
+            "question_ids": question_ids,
+            "source_refs": source_refs,
+        }
+    )
+    return result
+
+
 class KaoyanContentStore:
     """Query the prepared high-math content package without mutating it."""
 
     def __init__(self, db_path: str | Path | None = None) -> None:
         self.db_path = Path(db_path) if db_path is not None else default_content_db_path()
 
-    def _connect(self) -> sqlite3.Connection:
+    def _connect(self):
         if not self.db_path.exists():
             raise FileNotFoundError(f"Kaoyan content database not found: {self.db_path}")
         uri = f"file:{self.db_path.as_posix()}?mode=ro"
         conn = sqlite3.connect(uri, uri=True)
         conn.row_factory = sqlite3.Row
-        return conn
+        return closing(conn)
 
     def health(self) -> dict[str, Any]:
         counts: dict[str, int] = {}
         abnormalities: dict[str, Any] = {"missing_tables": [], "orphaned_questions": 0}
-        tables = [
-            "knowledge_points",
-            "questions",
-            "formulas",
-            "mistakes",
-            "review_cards",
-            "lecture_knowledge_nodes",
-            "lecture_chunks",
-            "lecture_formulas",
-            "lecture_mistakes",
-            "lecture_review_cards",
-            "worked_examples",
-        ]
-        with self._connect() as conn:
-            for table in tables:
+        checked_at = _now_iso()
+        for table in _CONTENT_TABLES:
+            counts[table] = 0
+        if not self.db_path.exists():
+            return {
+                "db_path": str(self.db_path),
+                "db_exists": False,
+                "status": "missing",
+                "counts": counts,
+                "abnormalities": abnormalities,
+                "checked_at": checked_at,
+            }
+        try:
+            conn_cm = self._connect()
+        except Exception as exc:
+            return {
+                "db_path": str(self.db_path),
+                "db_exists": True,
+                "status": "error",
+                "counts": counts,
+                "abnormalities": {**abnormalities, "error": str(exc)},
+                "checked_at": checked_at,
+            }
+        with conn_cm as conn:
+            for table in _CONTENT_TABLES:
                 try:
                     counts[table] = int(conn.execute(f"SELECT count(*) FROM {table}").fetchone()[0])
                 except sqlite3.Error:
-                    counts[table] = 0
                     abnormalities["missing_tables"].append(table)
             if not abnormalities["missing_tables"] or {"knowledge_points", "questions"}.isdisjoint(abnormalities["missing_tables"]):
                 try:
@@ -150,35 +348,101 @@ class KaoyanContentStore:
                 except sqlite3.Error:
                     abnormalities["orphaned_questions"] = 0
         status = "healthy" if not abnormalities["missing_tables"] and not abnormalities["orphaned_questions"] else "abnormal"
-        return {"db_path": str(self.db_path), "db_exists": self.db_path.exists(), "status": status, "counts": counts, "abnormalities": abnormalities}
+        return {
+            "db_path": str(self.db_path),
+            "db_exists": True,
+            "status": status,
+            "counts": counts,
+            "abnormalities": abnormalities,
+            "checked_at": checked_at,
+        }
 
-    def create_material_parse_task(self, filename: str, content_type: str = "pdf") -> dict[str, Any]:
-        now = datetime.now(timezone.utc).isoformat()
+    def create_material_parse_task(
+        self,
+        filename: str,
+        content_type: str = "pdf",
+        *,
+        user_id: str = DEFAULT_USER_ID,
+        raw_text: str | None = None,
+    ) -> dict[str, Any]:
+        now = _now_iso()
+        extracted_sections = self._extract_material_sections(raw_text or "", filename)
+        status = "completed" if raw_text and extracted_sections else "pending"
         task = {
             "task_id": f"mat_{uuid.uuid4().hex[:12]}",
             "filename": str(filename),
             "content_type": str(content_type or "pdf"),
-            "status": "pending",
-            "progress": 0,
+            "status": status,
+            "progress": 100 if status == "completed" else 0,
             "retry_count": 0,
             "fail_reason": "",
+            "extracted_sections": extracted_sections,
+            "user_id": str(user_id or DEFAULT_USER_ID),
             "created_at": now,
             "updated_at": now,
         }
         _MATERIAL_PARSE_TASKS[task["task_id"]] = task
         return dict(task)
 
-    def get_material_parse_task(self, task_id: str) -> dict[str, Any] | None:
+    def get_material_parse_task(self, task_id: str, *, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
         task = _MATERIAL_PARSE_TASKS.get(str(task_id))
         if task is None:
             return None
-        result = dict(task)
-        if result.get("status") == "pending":
-            result["status"] = "completed"
-            result["progress"] = 100
-            result["updated_at"] = datetime.now(timezone.utc).isoformat()
-        return result
+        if str(task.get("user_id") or DEFAULT_USER_ID) != str(user_id or DEFAULT_USER_ID):
+            return None
+        if task.get("status") == "pending":
+            task["status"] = "completed"
+            task["progress"] = 100
+            task["updated_at"] = _now_iso()
+        return dict(task)
+
+    def _extract_material_sections(self, raw_text: str, filename: str) -> list[dict[str, Any]]:
+        text = clean_content(raw_text) if isinstance(raw_text, str) else ""
+        if not text:
+            return []
+        sections: list[dict[str, Any]] = []
+        current_title = Path(filename).stem or "material"
+        current_lines: list[str] = []
+
+        def flush() -> None:
+            content = "\n".join(current_lines).strip()
+            if not content:
+                return
+            order = len(sections) + 1
+            sections.append(
+                {
+                    "section_id": f"sec_{order:03d}",
+                    "title": current_title,
+                    "content": content,
+                    "order": order,
+                    "word_count": len(content),
+                }
+            )
+
+        for line in text.splitlines():
+            heading = re.match(r"^\s{0,3}#{1,6}\s+(.+?)\s*$", line)
+            if heading:
+                flush()
+                current_title = heading.group(1).strip()
+                current_lines = []
+                continue
+            current_lines.append(line)
+        flush()
+        if not sections:
+            sections.append(
+                {
+                    "section_id": "sec_001",
+                    "title": Path(filename).stem or "material",
+                    "content": text,
+                    "order": 1,
+                    "word_count": len(text),
+                }
+            )
+        return sections[:50]
+
     def list_knowledge_points(self) -> list[dict[str, Any]]:
+        if not self.db_path.exists():
+            return []
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -188,9 +452,11 @@ class KaoyanContentStore:
                 ORDER BY knowledge_id
                 """
             ).fetchall()
-        return _clean_rows(rows)
+        return [_freeze_knowledge_node(row, include_children=False) for row in _clean_rows(rows)]
 
     def list_lecture_nodes(self) -> list[dict[str, Any]]:
+        if not self.db_path.exists():
+            return []
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -202,12 +468,14 @@ class KaoyanContentStore:
             ).fetchall()
         return [self._lecture_row_to_knowledge(_row_to_dict(row)) for row in rows]
 
-    def knowledge_tree(self) -> list[dict[str, Any]]:
+    def knowledge_tree(self, subject: str | None = None) -> list[dict[str, Any]]:
         """Return the student-facing lecture knowledge tree, not the question-bank grouping tree."""
+        if subject and subject != "math":
+            return []
         nodes = [node for node in self.list_lecture_nodes() if not self._is_noisy_lecture_node(node)]
         by_id: dict[str, dict[str, Any]] = {}
         for node in nodes:
-            item = dict(node)
+            item = _freeze_knowledge_node(dict(node), include_children=False)
             item["children"] = []
             by_id[item["knowledge_id"]] = item
 
@@ -218,14 +486,20 @@ class KaoyanContentStore:
                 by_id[parent_id]["children"].append(item)
             else:
                 roots.append(item)
-        return roots
+        return [_freeze_knowledge_node(root, include_children=True) for root in roots]
 
     def get_knowledge(self, knowledge_id: str, question_limit: int = 8) -> dict[str, Any] | None:
+        if not self.db_path.exists():
+            return None
         if knowledge_id.startswith("LECTURE_"):
-            return self._get_lecture_knowledge(knowledge_id, question_limit)
-        return self._get_question_group_knowledge(knowledge_id, question_limit)
+            detail = self._get_lecture_knowledge(knowledge_id, question_limit)
+        else:
+            detail = self._get_question_group_knowledge(knowledge_id, question_limit)
+        return _freeze_knowledge_detail(detail) if detail is not None else None
 
     def get_question(self, question_id: str) -> dict[str, Any] | None:
+        if not self.db_path.exists():
+            return None
         with self._connect() as conn:
             row = conn.execute(
                 """
@@ -240,6 +514,8 @@ class KaoyanContentStore:
 
     def get_questions(self, question_ids: list[str]) -> list[dict[str, Any]]:
         if not question_ids:
+            return []
+        if not self.db_path.exists():
             return []
         placeholders = ",".join("?" for _ in question_ids)
         with self._connect() as conn:
@@ -264,6 +540,8 @@ class KaoyanContentStore:
         limit: int = 5,
         exclude_ids: list[str] | None = None,
     ) -> list[dict[str, Any]]:
+        if not self.db_path.exists():
+            return []
         clauses: list[str] = []
         params: list[Any] = []
         practice_knowledge_ids = self.resolve_practice_knowledge_ids(knowledge_id) if knowledge_id else []
@@ -299,6 +577,8 @@ class KaoyanContentStore:
         return _question_rows(rows)
 
     def sample_knowledge_for_plan(self, limit: int = 8) -> list[dict[str, Any]]:
+        if not self.db_path.exists():
+            return []
         with self._connect() as conn:
             rows = conn.execute(
                 """
@@ -319,25 +599,30 @@ class KaoyanContentStore:
             return []
         if not knowledge_id.startswith("LECTURE_"):
             return [knowledge_id]
+        if not self.db_path.exists():
+            return []
         with self._connect() as conn:
-            rows = conn.execute(
-                """
-                WITH RECURSIVE target(id) AS (
-                    SELECT ?
-                    UNION ALL
-                    SELECT node.lecture_knowledge_id
-                    FROM lecture_knowledge_nodes node
-                    JOIN target ON node.parent_id = target.id
-                )
-                SELECT DISTINCT knowledge_id, max(confidence) AS score
-                FROM lecture_knowledge_mappings
-                WHERE lecture_knowledge_id IN (SELECT id FROM target)
-                GROUP BY knowledge_id
-                ORDER BY score DESC, knowledge_id
-                LIMIT ?
-                """,
-                (knowledge_id, limit),
-            ).fetchall()
+            try:
+                rows = conn.execute(
+                    """
+                    WITH RECURSIVE target(id) AS (
+                        SELECT ?
+                        UNION ALL
+                        SELECT node.lecture_knowledge_id
+                        FROM lecture_knowledge_nodes node
+                        JOIN target ON node.parent_id = target.id
+                    )
+                    SELECT DISTINCT knowledge_id, max(confidence) AS score
+                    FROM lecture_knowledge_mappings
+                    WHERE lecture_knowledge_id IN (SELECT id FROM target)
+                    GROUP BY knowledge_id
+                    ORDER BY score DESC, knowledge_id
+                    LIMIT ?
+                    """,
+                    (knowledge_id, limit),
+                ).fetchall()
+            except sqlite3.Error:
+                return []
         return [str(row["knowledge_id"]) for row in rows]
 
     def _get_question_group_knowledge(self, knowledge_id: str, question_limit: int) -> dict[str, Any] | None:
@@ -459,13 +744,409 @@ class KaoyanContentStore:
             "chunks": chunk_dicts,
         }
 
+    def query_rag(
+        self,
+        query: str,
+        *,
+        top_k: int = 5,
+        filters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        """Lightweight local retrieval over the content SQLite package."""
+        query_text = str(query or "").strip()
+        limit = max(1, min(int(top_k or 5), 20))
+        base = {
+            "kb_name": "",
+            "query": query_text,
+            "answer": "",
+            "contexts": [],
+            "sources": [],
+            "results": [],
+            "status": "empty",
+        }
+        if not query_text:
+            return {**base, "fallback": "Query is empty."}
+        if not self.db_path.exists():
+            return {**base, "status": "missing", "fallback": "Kaoyan content database is not available."}
+
+        filters = filters or {}
+        try:
+            with self._connect() as conn:
+                candidates = self._rag_candidates(conn, query_text, filters)
+        except Exception as exc:
+            return {**base, "status": "fallback", "fallback": "Kaoyan content retrieval is unavailable.", "error": str(exc)}
+
+        tokens = self._query_tokens(query_text)
+        scored: list[dict[str, Any]] = []
+        for candidate in candidates:
+            haystack = " ".join(
+                str(candidate.get(key) or "")
+                for key in ["title", "snippet", "content", "source_id", "source_type"]
+            )
+            score = self._score_candidate(query_text, tokens, haystack)
+            if score <= 0:
+                continue
+            context = {
+                "id": candidate["id"],
+                "title": candidate["title"],
+                "snippet": _compact_text(candidate.get("snippet") or candidate.get("content"), 700),
+                "score": score,
+                "source_type": candidate["source_type"],
+                "source_id": candidate["source_id"],
+                "metadata": candidate.get("metadata") or {},
+            }
+            scored.append(context)
+
+        contexts = sorted(scored, key=lambda item: item["score"], reverse=True)[:limit]
+        if not contexts:
+            return {**base, "status": "empty", "fallback": "No grounded kaoyan content matched this query."}
+
+        sources: list[dict[str, Any]] = []
+        seen_sources: set[tuple[str, str]] = set()
+        for context in contexts:
+            key = (str(context["source_type"]), str(context["source_id"]))
+            if key in seen_sources:
+                continue
+            seen_sources.add(key)
+            sources.append(
+                {
+                    "id": context["id"],
+                    "title": context["title"],
+                    "source_type": context["source_type"],
+                    "source_id": context["source_id"],
+                    "score": context["score"],
+                    "path": (context.get("metadata") or {}).get("path", ""),
+                }
+            )
+        answer = "\n\n".join(f"### {item['title']}\n{item['snippet']}" for item in contexts)
+        return {
+            **base,
+            "status": "success",
+            "answer": answer,
+            "contexts": contexts,
+            "sources": sources,
+            "results": contexts,
+        }
+
+    def _query_tokens(self, query: str) -> list[str]:
+        tokens = [part.lower() for part in re.findall(r"[\w\u4e00-\u9fff]+", query) if len(part.strip()) >= 2]
+        if not tokens and query.strip():
+            tokens = [query.strip().lower()]
+        return _unique_strings(tokens)
+
+    def _score_candidate(self, query: str, tokens: list[str], haystack: str) -> float:
+        text = haystack.lower()
+        if not text:
+            return 0.0
+        score = 0.0
+        query_norm = query.lower().strip()
+        if query_norm and query_norm in text:
+            score += 0.55
+        matches = sum(1 for token in tokens if token in text)
+        if matches:
+            score += 0.25 + min(0.2, matches * 0.05)
+        return round(min(score, 1.0), 4)
+
+    def _rag_candidates(self, conn: sqlite3.Connection, query: str, filters: dict[str, Any]) -> list[dict[str, Any]]:
+        candidates: list[dict[str, Any]] = []
+        tokens = self._query_tokens(query)[:5] or [query]
+        source_type_filter = str(filters.get("source_type") or "").strip()
+
+        def like_clause(columns: list[str]) -> tuple[str, list[str]]:
+            clauses: list[str] = []
+            params: list[str] = []
+            for token in tokens:
+                for column in columns:
+                    clauses.append(f"COALESCE({column}, '') LIKE ?")
+                    params.append(f"%{token}%")
+            return " OR ".join(clauses) or "1=1", params
+
+        if source_type_filter in {"", "lecture_chunk", "chunk"}:
+            clause, params = like_clause(["title", "raw_markdown", "lecture_knowledge_id"])
+            try:
+                rows = conn.execute(
+                    f"""
+                    SELECT chunk_id, lecture_knowledge_id, content_type, title, raw_markdown
+                    FROM lecture_chunks
+                    WHERE {clause}
+                    ORDER BY sort_order
+                    LIMIT 80
+                    """,
+                    tuple(params),
+                ).fetchall()
+                for row in rows:
+                    data = _row_to_dict(row)
+                    candidates.append(
+                        {
+                            "id": data.get("chunk_id"),
+                            "title": data.get("title") or data.get("lecture_knowledge_id") or "Lecture chunk",
+                            "snippet": data.get("raw_markdown"),
+                            "source_type": "lecture_chunk",
+                            "source_id": data.get("lecture_knowledge_id") or data.get("chunk_id"),
+                            "metadata": {"content_type": data.get("content_type"), "path": data.get("lecture_knowledge_id")},
+                        }
+                    )
+            except sqlite3.Error:
+                pass
+
+        if source_type_filter in {"", "knowledge"}:
+            clause, params = like_clause(["title", "full_path", "raw_markdown", "lecture_knowledge_id"])
+            try:
+                rows = conn.execute(
+                    f"""
+                    SELECT lecture_knowledge_id, node_type, title, full_path, raw_markdown
+                    FROM lecture_knowledge_nodes
+                    WHERE {clause}
+                    ORDER BY sort_order
+                    LIMIT 80
+                    """,
+                    tuple(params),
+                ).fetchall()
+                for row in rows:
+                    data = _row_to_dict(row)
+                    candidates.append(
+                        {
+                            "id": data.get("lecture_knowledge_id"),
+                            "title": data.get("title") or data.get("lecture_knowledge_id") or "Knowledge",
+                            "snippet": data.get("raw_markdown") or data.get("full_path"),
+                            "source_type": "knowledge",
+                            "source_id": data.get("lecture_knowledge_id"),
+                            "metadata": {"node_type": data.get("node_type"), "path": data.get("full_path")},
+                        }
+                    )
+            except sqlite3.Error:
+                pass
+
+        if source_type_filter in {"", "question"}:
+            clause, params = like_clause(["stem", "analysis", "answer", "knowledge_id", "question_id"])
+            extra = ""
+            if filters.get("knowledge_id"):
+                extra = " AND knowledge_id = ?"
+                params.append(str(filters["knowledge_id"]))
+            try:
+                rows = conn.execute(
+                    f"""
+                    SELECT question_id, knowledge_id, question_type, difficulty_level, stem, answer, analysis, source, source_type, year
+                    FROM questions
+                    WHERE ({clause}){extra}
+                    LIMIT 80
+                    """,
+                    tuple(params),
+                ).fetchall()
+                for row in rows:
+                    data = _question_row_to_dict(row)
+                    candidates.append(
+                        {
+                            "id": data.get("question_id"),
+                            "title": _compact_text(data.get("stem_without_options") or data.get("stem"), 80) or data.get("question_id") or "Question",
+                            "snippet": "\n\n".join(str(data.get(key) or "") for key in ["stem", "answer", "analysis"]),
+                            "source_type": "question",
+                            "source_id": data.get("question_id"),
+                            "metadata": {"knowledge_id": data.get("knowledge_id"), "path": data.get("source") or ""},
+                        }
+                    )
+            except sqlite3.Error:
+                pass
+
+        if source_type_filter in {"", "formula"}:
+            clause, params = like_clause(["formula_name", "formula_content", "usage_scene", "common_mistake", "raw_markdown"])
+            try:
+                rows = conn.execute(
+                    f"""
+                    SELECT formula_id, lecture_knowledge_id, formula_name, formula_content, usage_scene, common_mistake, raw_markdown
+                    FROM lecture_formulas
+                    WHERE {clause}
+                    LIMIT 80
+                    """,
+                    tuple(params),
+                ).fetchall()
+                for row in rows:
+                    data = _row_to_dict(row)
+                    candidates.append(
+                        {
+                            "id": data.get("formula_id"),
+                            "title": data.get("formula_name") or data.get("formula_id") or "Formula",
+                            "snippet": "\n\n".join(str(data.get(key) or "") for key in ["formula_content", "usage_scene", "common_mistake", "raw_markdown"]),
+                            "source_type": "formula",
+                            "source_id": data.get("formula_id"),
+                            "metadata": {"knowledge_id": data.get("lecture_knowledge_id"), "path": data.get("lecture_knowledge_id")},
+                        }
+                    )
+            except sqlite3.Error:
+                pass
+
+        return candidates
+
+    def render_obsidian_export(
+        self,
+        source_type: str,
+        source_id: str | None = None,
+        *,
+        payload: dict[str, Any] | None = None,
+    ) -> dict[str, str] | None:
+        payload = payload or {}
+        source_type = str(source_type or "").strip()
+        if source_type == "knowledge":
+            if not source_id:
+                return None
+            detail = self.get_knowledge(source_id)
+            if detail is None:
+                return None
+            title = detail["title"]
+            path = f"Kaoyan/Knowledge/{_safe_slug(title, source_id)}.md"
+            return {"path": path, "markdown": self._knowledge_obsidian_markdown(detail)}
+        if source_type == "question":
+            if not source_id:
+                return None
+            question = self.get_question(source_id)
+            if question is None:
+                return None
+            path = f"Kaoyan/Questions/{_safe_slug(source_id)}.md"
+            return {"path": path, "markdown": self._question_obsidian_markdown(question)}
+        if source_type == "wrong_question":
+            question_id = str(source_id or payload.get("question_id") or "wrong-question")
+            path = f"Kaoyan/Wrong Questions/{_safe_slug(question_id)}.md"
+            return {"path": path, "markdown": self._wrong_question_obsidian_markdown(question_id, payload)}
+        if source_type == "diagnostic_report":
+            report_id = str(source_id or payload.get("report_id") or "diagnostic-report")
+            path = f"Kaoyan/Diagnostics/{_safe_slug(report_id)}.md"
+            return {"path": path, "markdown": self._diagnostic_obsidian_markdown(report_id, payload)}
+        return None
+
+    def _frontmatter(self, values: dict[str, Any]) -> str:
+        lines = ["---"]
+        for key, value in values.items():
+            if value in (None, "", [], {}):
+                continue
+            if isinstance(value, list):
+                rendered = "[" + ", ".join(json.dumps(str(item), ensure_ascii=False) for item in value) + "]"
+            else:
+                rendered = json.dumps(str(value), ensure_ascii=False)
+            lines.append(f"{key}: {rendered}")
+        lines.append("---")
+        return "\n".join(lines)
+
+    def _knowledge_obsidian_markdown(self, detail: dict[str, Any]) -> str:
+        knowledge = detail.get("knowledge") or {}
+        lines = [
+            self._frontmatter(
+                {
+                    "type": "kaoyan_knowledge",
+                    "id": detail.get("id"),
+                    "title": detail.get("title"),
+                    "tags": knowledge.get("tags") or [],
+                }
+            ),
+            "",
+            f"# {detail.get('title')}",
+            "",
+            "## Summary",
+            detail.get("summary") or "",
+            "",
+        ]
+        formulas = detail.get("formulas") or []
+        if formulas:
+            lines.extend(["## Formulas", ""])
+            for formula in formulas:
+                lines.append(f"- **{formula.get('formula_name') or formula.get('formula_id')}**: {formula.get('formula_content') or formula.get('raw_markdown') or ''}")
+            lines.append("")
+        mistakes = detail.get("mistakes") or []
+        if mistakes:
+            lines.extend(["## Common Mistakes", ""])
+            for mistake in mistakes:
+                lines.append(f"- {mistake.get('mistake_content') or mistake.get('raw_markdown') or mistake.get('mistake_id')}")
+            lines.append("")
+        if detail.get("question_ids"):
+            lines.extend(["## Linked Questions", ""])
+            lines.extend(f"- [[{qid}]]" for qid in detail["question_ids"])
+            lines.append("")
+        return "\n".join(lines).strip() + "\n"
+
+    def _question_obsidian_markdown(self, question: dict[str, Any]) -> str:
+        lines = [
+            self._frontmatter(
+                {
+                    "type": "kaoyan_question",
+                    "id": question.get("question_id"),
+                    "knowledge_id": question.get("knowledge_id"),
+                    "difficulty": question.get("difficulty_level"),
+                    "year": question.get("year"),
+                }
+            ),
+            "",
+            f"# {question.get('question_id')}",
+            "",
+            "## Stem",
+            question.get("stem_without_options") or question.get("stem") or "",
+            "",
+        ]
+        if question.get("options"):
+            lines.extend(["## Options", ""])
+            for option in question["options"]:
+                lines.append(f"- {option.get('label')}. {option.get('content')}")
+            lines.append("")
+        lines.extend(["## Answer", str(question.get("answer") or ""), "", "## Analysis", str(question.get("analysis") or ""), ""])
+        return "\n".join(lines).strip() + "\n"
+
+    def _wrong_question_obsidian_markdown(self, question_id: str, payload: dict[str, Any]) -> str:
+        question = payload.get("question") if isinstance(payload.get("question"), dict) else {}
+        lines = [
+            self._frontmatter(
+                {
+                    "type": "kaoyan_wrong_question",
+                    "id": question_id,
+                    "knowledge_id": payload.get("knowledge_id") or question.get("knowledge_id"),
+                    "wrong_count": payload.get("wrong_count"),
+                    "review_status": payload.get("review_status"),
+                }
+            ),
+            "",
+            f"# Wrong Question {question_id}",
+            "",
+            "## Question",
+            question.get("stem_without_options") or question.get("stem") or payload.get("prompt") or "",
+            "",
+            "## Error Reason",
+            str(payload.get("error_reason") or ""),
+            "",
+            "## Correction",
+            str(payload.get("correction") or payload.get("analysis") or question.get("analysis") or ""),
+        ]
+        return "\n".join(lines).strip() + "\n"
+
+    def _diagnostic_obsidian_markdown(self, report_id: str, payload: dict[str, Any]) -> str:
+        draft = payload.get("profile_draft") if isinstance(payload.get("profile_draft"), dict) else {}
+        weak_modules = draft.get("weak_modules") or payload.get("weak_modules") or []
+        recommendations = payload.get("recommendations") or draft.get("plan_focus") or []
+        lines = [
+            self._frontmatter(
+                {
+                    "type": "kaoyan_diagnostic_report",
+                    "id": report_id,
+                    "mode": payload.get("mode"),
+                    "tags": ["kaoyan", "diagnostic"],
+                }
+            ),
+            "",
+            f"# Diagnostic Report {report_id}",
+            "",
+            "## Summary",
+            str(payload.get("summary") or draft.get("reasoning_summary") or ""),
+            "",
+            "## Weak Modules",
+            "",
+        ]
+        lines.extend(f"- {item}" for item in weak_modules)
+        lines.extend(["", "## Recommendations", ""])
+        lines.extend(f"- {item}" for item in recommendations)
+        return "\n".join(lines).strip() + "\n"
+
     def _lecture_row_to_knowledge(self, row: dict[str, Any]) -> dict[str, Any]:
         full_path = str(row.get("full_path") or row.get("title") or "")
         path_parts = [part.strip() for part in full_path.split(">") if part.strip()]
         title = str(row.get("title") or "")
         node_type = str(row.get("node_type") or "")
         importance = 5 if node_type == "knowledge_point" else 4 if node_type in {"subsection", "section"} else 3
-        return {
+        result = {
             "knowledge_id": row.get("lecture_knowledge_id"),
             "subject": "math",
             "module": node_type or "lecture",
@@ -481,6 +1162,7 @@ class KaoyanContentStore:
             "sort_order": row.get("sort_order") or 0,
             "needs_review": row.get("needs_review") or 0,
         }
+        return _freeze_knowledge_node(result, include_children=False)
 
     def _is_noisy_lecture_node(self, node: dict[str, Any]) -> bool:
         node_type = str(node.get("node_type") or "")

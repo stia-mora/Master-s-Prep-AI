@@ -6,6 +6,7 @@ import uuid
 
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
+import pytest
 
 from master_prep_ai.api.routers import kaoyan as kaoyan_router
 from master_prep_ai.auth import AuthUser
@@ -14,6 +15,10 @@ from master_prep_ai.kaoyan.learning_store import KaoyanLearningStore
 from master_prep_ai.kaoyan.practice import KaoyanPracticeService
 
 CONTENT_DB = default_content_db_path()
+pytestmark = pytest.mark.skipif(
+    not CONTENT_DB.exists(),
+    reason="math_content.sqlite is not available in this workspace",
+)
 
 
 def test_content_store_reads_high_math_package() -> None:

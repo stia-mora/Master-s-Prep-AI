@@ -9,14 +9,42 @@ export interface KaoyanProfile {
   weak_modules: string[];
 }
 
+export interface ContentHealth {
+  db_path: string;
+  db_exists: boolean;
+  status: "healthy" | "abnormal" | "missing" | "error" | string;
+  counts: Record<string, number>;
+  abnormalities: {
+    missing_tables?: string[];
+    orphaned_questions?: number;
+    error?: string;
+    [key: string]: unknown;
+  };
+  checked_at?: string;
+}
+
+export interface SourceRef {
+  id: string;
+  title: string;
+  source_type: string;
+  source: string;
+  path?: string;
+}
+
 export interface KnowledgeNode {
+  id: string;
   knowledge_id: string;
   subject: string;
   module: string;
   chapter?: string;
   section?: string;
+  title: string;
   knowledge_name: string;
   parent_id?: string | null;
+  level: number;
+  difficulty: number;
+  tags: string[];
+  source_refs: SourceRef[];
   importance_level: number;
   is_core: number;
   raw_markdown?: string;
@@ -50,6 +78,13 @@ export interface ContentQuestion {
 
 export interface KnowledgeDetail {
   knowledge: Omit<KnowledgeNode, "children">;
+  id: string;
+  title: string;
+  summary: string;
+  prerequisites: string[];
+  examples: Array<{ question_id?: string; title?: string; difficulty?: number | string | null }>;
+  question_ids: string[];
+  source_refs: SourceRef[];
   questions: ContentQuestion[];
   formulas: Array<{
     formula_id: string;
@@ -71,6 +106,7 @@ export interface KnowledgeDetail {
     back_content: string;
     review_interval?: number;
   }>;
+  chunks?: Array<Record<string, unknown>>;
 }
 
 export interface PlanTask {
@@ -238,23 +274,57 @@ export interface MaterialParseTask {
   task_id: string;
   filename: string;
   content_type: string;
-  status: string;
+  status: "pending" | "running" | "completed" | "failed" | string;
   progress?: number;
   retry_count: number;
   fail_reason: string;
+  extracted_sections: Array<{
+    section_id: string;
+    title: string;
+    content: string;
+    order: number;
+    word_count?: number;
+  }>;
+  user_id?: string;
   created_at: string;
   updated_at?: string;
 }
 
+export interface RagContext {
+  id: string;
+  title: string;
+  snippet: string;
+  score: number;
+  source_type: string;
+  source_id: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface RagSource {
+  id: string;
+  title: string;
+  source_type: string;
+  source_id: string;
+  score?: number;
+  path?: string;
+}
+
 export interface RagQueryResult {
-  kb_name: string;
+  kb_name?: string;
   query: string;
   status?: string;
   answer?: string;
-  results: unknown[];
+  contexts: RagContext[];
+  sources: RagSource[];
+  results: RagContext[];
   fallback?: string;
   error?: string;
   raw?: Record<string, unknown>;
+}
+
+export interface ObsidianExportResult {
+  path: string;
+  markdown: string;
 }
 
 export interface MasteryRecord {

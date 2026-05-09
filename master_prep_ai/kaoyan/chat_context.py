@@ -153,6 +153,67 @@ def _records_markdown(items: list[dict[str, Any]] | None, heading_key: str = "")
         lines.append("")
     return "\n".join(lines).strip()
 
+
+def _normalize_rag_search_result(
+    *,
+    kb_name: str,
+    query: str,
+    search_result: dict[str, Any],
+) -> dict[str, Any]:
+    answer = search_result.get("answer") or search_result.get("content") or ""
+    raw_sources = search_result.get("sources") or search_result.get("results") or search_result.get("source_nodes") or []
+    contexts: list[dict[str, Any]] = []
+    sources: list[dict[str, Any]] = []
+    for index, item in enumerate(raw_sources):
+        if not isinstance(item, dict):
+            continue
+        source_id = str(item.get("chunk_id") or item.get("id") or item.get("source") or f"source_{index + 1}")
+        title = str(item.get("title") or item.get("file_name") or item.get("source") or source_id)
+        snippet = _clip(item.get("content") or item.get("snippet") or item.get("text") or "", 700)
+        score_raw = item.get("score")
+        try:
+            score = float(score_raw) if score_raw not in (None, "") else 0.0
+        except (TypeError, ValueError):
+            score = 0.0
+        context = {
+            "id": source_id,
+            "title": title,
+            "snippet": snippet,
+            "score": score,
+            "source_type": item.get("source_type") or "rag",
+            "source_id": source_id,
+            "metadata": {
+                "source": item.get("source", ""),
+                "page": item.get("page", ""),
+                "kb_name": kb_name,
+            },
+        }
+        contexts.append(context)
+        sources.append(
+            {
+                "id": source_id,
+                "title": title,
+                "source_type": context["source_type"],
+                "source_id": source_id,
+                "score": score,
+                "path": item.get("source") or "",
+            }
+        )
+    status = "needs_reindex" if search_result.get("needs_reindex") else "success"
+    if not answer and not contexts:
+        status = "empty"
+    return {
+        "kb_name": kb_name,
+        "query": query,
+        "status": status,
+        "answer": answer,
+        "contexts": contexts,
+        "sources": sources,
+        "results": contexts,
+        "raw": search_result,
+    }
+
+
 class KaoyanChatContextService:
     """Turn a kaoyan knowledge point or question into a scoped RAG chat entry."""
 
@@ -181,10 +242,20 @@ class KaoyanChatContextService:
             result["initial_message"] = self._rag_prompt(result["title"], result["context_payload"], str(rag["kb_name"]))
         return result
 
-    async def query_rag(self, kb_name: str, query: str) -> dict[str, Any]:
-        base = {"kb_name": str(kb_name), "query": str(query), "results": []}
+    async def query_rag(
+        self,
+        kb_name: str | None,
+        query: str,
+        *,
+        top_k: int = 5,
+        filters: dict[str, Any] | None = None,
+    ) -> dict[str, Any]:
+        kb = str(kb_name or "").strip()
+        if not kb:
+            return self.content_store.query_rag(query, top_k=top_k, filters=filters)
+        base = {"kb_name": kb, "query": str(query), "contexts": [], "sources": [], "results": []}
         try:
-            search_result = await RAGService(kb_base_dir=str(self.kb_base_dir)).search(query=str(query), kb_name=str(kb_name))
+            search_result = await RAGService(kb_base_dir=str(self.kb_base_dir)).search(query=str(query), kb_name=kb, top_k=top_k)
         except Exception as exc:
             return {
                 **base,
@@ -193,14 +264,8 @@ class KaoyanChatContextService:
                 "fallback": "RAG search is unavailable; use embedded kaoyan context instead.",
                 "error": str(exc),
             }
-        results = search_result.get("results") or search_result.get("sources") or search_result.get("source_nodes") or []
-        return {
-            **base,
-            "status": "success",
-            "answer": search_result.get("answer") or search_result.get("content") or "",
-            "results": results,
-            "raw": search_result,
-        }
+        return _normalize_rag_search_result(kb_name=kb, query=str(query), search_result=search_result)
+
     def _knowledge_context(self, knowledge_id: str, intent: str) -> dict[str, Any] | None:
         detail = self.content_store.get_knowledge(knowledge_id, question_limit=8)
         if detail is None:

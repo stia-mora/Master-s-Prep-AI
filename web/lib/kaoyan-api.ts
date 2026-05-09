@@ -1,9 +1,11 @@
 import { apiUrl } from "@/lib/api";
 import type {
+  ContentHealth,
   DashboardSummary,
   DiagnosticResult,
   DiagnosticReport,
   KaoyanChatContext,
+  ObsidianExportResult,
   RagQueryResult,
   PlanReorderResult,
   MaterialParseTask,
@@ -37,8 +39,13 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export function getKnowledgeTree(): Promise<KnowledgeNode[]> {
-  return request<KnowledgeNode[]>("/api/v1/kaoyan/content/knowledge-tree");
+export function getKnowledgeTree(subject?: string): Promise<KnowledgeNode[]> {
+  const suffix = subject ? `?subject=${encodeURIComponent(subject)}` : "";
+  return request<KnowledgeNode[]>(`/api/v1/kaoyan/content/knowledge-tree${suffix}`);
+}
+
+export function getContentHealth(): Promise<ContentHealth> {
+  return request<ContentHealth>("/api/v1/kaoyan/content/health");
 }
 
 export function getKnowledgeDetail(knowledgeId: string): Promise<KnowledgeDetail> {
@@ -153,7 +160,7 @@ export function submitReview(reviewId: string, status: "reviewed" | "mastered" |
   });
 }
 
-export function createMaterialParseTask(input: { filename: string; content_type?: string }): Promise<MaterialParseTask> {
+export function createMaterialParseTask(input: { filename: string; content_type?: string; raw_text?: string }): Promise<MaterialParseTask> {
   return request<MaterialParseTask>("/api/v1/kaoyan/materials/parse", {
     method: "POST",
     body: JSON.stringify(input),
@@ -164,8 +171,24 @@ export function getMaterialParseTask(taskId: string): Promise<MaterialParseTask>
   return request<MaterialParseTask>(`/api/v1/kaoyan/materials/tasks/${taskId}`);
 }
 
-export function queryKaoyanRag(input: { kb_name: string; query: string }): Promise<RagQueryResult> {
+export function queryKaoyanRag(input: {
+  kb_name?: string;
+  query: string;
+  top_k?: number;
+  filters?: Record<string, unknown>;
+}): Promise<RagQueryResult> {
   return request<RagQueryResult>("/api/v1/kaoyan/rag/query", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function exportObsidianMarkdown(input: {
+  source_type: "knowledge" | "question" | "wrong_question" | "diagnostic_report";
+  source_id?: string;
+  payload?: Record<string, unknown>;
+}): Promise<ObsidianExportResult> {
+  return request<ObsidianExportResult>("/api/v1/kaoyan/obsidian/export", {
     method: "POST",
     body: JSON.stringify(input),
   });
