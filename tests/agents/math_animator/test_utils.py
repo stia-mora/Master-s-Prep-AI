@@ -1,6 +1,9 @@
 from __future__ import annotations
 
-from master_prep_ai.agents.math_animator.utils import build_repair_error_message, extract_json_object
+from master_prep_ai.agents.math_animator.utils import (
+    build_repair_error_message,
+    extract_json_object,
+)
 
 
 def test_build_repair_error_message_adds_targeted_3d_point_hint() -> None:

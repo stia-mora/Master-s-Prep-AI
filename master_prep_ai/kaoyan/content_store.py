@@ -8,8 +8,8 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-import uuid
 from typing import Any
+import uuid
 
 DEFAULT_USER_ID = "local-user"
 _MATERIAL_PARSE_TASKS: dict[str, dict[str, Any]] = {}
