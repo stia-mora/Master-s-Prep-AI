@@ -37,6 +37,7 @@ class DiagnosticSessionRequest(BaseModel):
 class PracticeSessionRequest(BaseModel):
     session_type: Literal["special", "wrong_retry", "similar"] = "special"
     knowledge_id: str | None = None
+    task_id: str | None = None
     source_question_id: str | None = None
     question_type: str | None = None
     difficulty_level: int | None = Field(default=None, ge=1, le=5)
@@ -111,17 +112,17 @@ def _learning():
 
 
 @router.get("/content/health")
-async def content_health() -> dict[str, Any]:
+async def content_health(user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
     return _content().health()
 
 
 @router.get("/content/knowledge-tree")
-async def get_knowledge_tree() -> list[dict[str, Any]]:
+async def get_knowledge_tree(user: AuthUser = Depends(require_current_user)) -> list[dict[str, Any]]:
     return _content().knowledge_tree()
 
 
 @router.get("/content/knowledge/{knowledge_id}")
-async def get_knowledge(knowledge_id: str) -> dict[str, Any]:
+async def get_knowledge(knowledge_id: str, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
     detail = _content().get_knowledge(knowledge_id)
     if detail is None:
         raise HTTPException(status_code=404, detail="Knowledge point not found")
@@ -253,6 +254,7 @@ async def create_practice_session(request: PracticeSessionRequest, user: AuthUse
     session = service.create_session(
         session_type=request.session_type,
         knowledge_id=request.knowledge_id,
+        task_id=request.task_id,
         source_question_id=request.source_question_id,
         question_type=request.question_type,
         difficulty_level=request.difficulty_level,

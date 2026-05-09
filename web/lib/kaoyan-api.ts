@@ -117,6 +117,7 @@ export function createKaoyanChatContext(input: {
 export function createPracticeSession(input: {
   session_type?: "special" | "wrong_retry" | "similar";
   knowledge_id?: string;
+  task_id?: string;
   source_question_id?: string;
   question_type?: string;
   difficulty_level?: number;
