@@ -3,14 +3,13 @@
 from __future__ import annotations
 
 import json
+from pathlib import Path
 
 import typer
 
 from master_prep_ai.app import MasterPrepAIApp
 
 from .common import console, print_notebook_table
-
-from pathlib import Path
 
 
 def register(app: typer.Typer) -> None:

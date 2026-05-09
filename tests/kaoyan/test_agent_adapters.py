@@ -3,7 +3,12 @@ from __future__ import annotations
 import asyncio
 
 from master_prep_ai.kaoyan import ai_service
-from master_prep_ai.kaoyan.agent_adapters import math_eval, memory_update, route_model, socratic_next_turn
+from master_prep_ai.kaoyan.agent_adapters import (
+    math_eval,
+    memory_update,
+    route_model,
+    socratic_next_turn,
+)
 
 
 def test_agent_adapters_are_reexported_from_ai_service() -> None:
