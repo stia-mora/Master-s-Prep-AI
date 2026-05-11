@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from functools import lru_cache
 import os
 import re
 import shutil
@@ -50,9 +51,25 @@ _MATH_SYMBOLS = {key: value.strip("$") for key, value in _TEXT_MATH_SYMBOLS.item
 _MATH_SYMBOLS.update({"’": "'", "′": "'", "−": "-", "，": ",", "。": "."})
 
 
+_DEFAULT_LATEX_PACKAGES = (
+    "ctex",
+    "geometry",
+    "enumitem",
+    "fontspec",
+    "iftex",
+    "amsmath",
+    "amsfonts",
+    "mathtools",
+    "unicode-math",
+    "lm",
+    "fandol",
+)
+
+
 def render_practice_pdf(payload: dict[str, Any]) -> bytes:
     """Render a practice PDF with XeLaTeX and return the PDF bytes."""
     xelatex = _resolve_xelatex()
+    _prepare_latex_for_render(xelatex)
     tex_source = build_practice_tex(payload)
     with tempfile.TemporaryDirectory(prefix="kaoyan_pdf_") as tmp:
         tmp_path = Path(tmp)
@@ -61,17 +78,20 @@ def render_practice_pdf(payload: dict[str, Any]) -> bytes:
         tex_path.write_text(tex_source, encoding="utf-8")
         try:
             completed = subprocess.run(
-                [xelatex, "-interaction=nonstopmode", "-halt-on-error", tex_path.name],
+                _build_xelatex_command(xelatex, tex_path.name),
                 cwd=tmp_path,
                 capture_output=True,
                 text=True,
                 encoding="utf-8",
                 errors="replace",
-                timeout=45,
+                timeout=_latex_render_timeout(),
                 check=False,
             )
         except subprocess.TimeoutExpired as exc:
-            raise PdfRenderError("XeLaTeX PDF generation timed out.") from exc
+            raise PdfRenderError(
+                "XeLaTeX PDF generation timed out. MiKTeX may still be downloading packages; "
+                "try again after package installation finishes or increase KAOYAN_LATEX_TIMEOUT."
+            ) from exc
         except OSError as exc:
             raise PdfRenderError(f"Unable to run XeLaTeX: {exc}") from exc
         if completed.returncode != 0 or not pdf_path.exists():
@@ -79,6 +99,129 @@ def render_practice_pdf(payload: dict[str, Any]) -> bytes:
             log_text = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else completed.stderr
             raise PdfRenderError("XeLaTeX PDF generation failed: " + _summarize_log(log_text))
         return pdf_path.read_bytes()
+
+
+def ensure_latex_packages() -> dict[str, Any]:
+    """Install the LaTeX packages needed by Kaoyan PDFs when MiKTeX is available."""
+    xelatex = _resolve_xelatex()
+    packages = _configured_latex_packages()
+    result: dict[str, Any] = {
+        "xelatex": xelatex,
+        "auto_install": _latex_auto_install_enabled(),
+        "packages": packages,
+        "installed": [],
+        "failed": [],
+        "skipped": [],
+    }
+    if not result["auto_install"]:
+        result["skipped"].append("KAOYAN_LATEX_AUTO_INSTALL is disabled")
+        return result
+    if not _is_miktex_xelatex(xelatex):
+        result["skipped"].append("Automatic package installation is only supported for MiKTeX")
+        return result
+    mpm = _resolve_mpm(xelatex)
+    if not mpm:
+        result["skipped"].append("MiKTeX package manager (mpm) was not found")
+        return result
+    result["mpm"] = mpm
+    for package in packages:
+        try:
+            completed = subprocess.run(
+                [mpm, f"--install={package}"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=_latex_install_timeout(),
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            result["failed"].append({"package": package, "error": str(exc)})
+            continue
+        if completed.returncode == 0:
+            result["installed"].append(package)
+        else:
+            result["failed"].append({"package": package, "error": _summarize_process(completed)})
+    return result
+
+
+@lru_cache(maxsize=4)
+def _prepare_latex_for_render(xelatex: str) -> None:
+    if _latex_auto_install_enabled():
+        ensure_latex_packages()
+
+
+def _build_xelatex_command(xelatex: str, tex_name: str) -> list[str]:
+    command = [xelatex]
+    if _latex_auto_install_enabled() and _is_miktex_xelatex(xelatex):
+        command.append("--enable-installer")
+    command.extend(["-interaction=nonstopmode", "-halt-on-error", tex_name])
+    return command
+
+
+def _configured_latex_packages() -> list[str]:
+    configured = os.environ.get("KAOYAN_LATEX_PACKAGES")
+    if not configured:
+        return list(_DEFAULT_LATEX_PACKAGES)
+    return [item.strip() for item in configured.split(",") if item.strip()]
+
+
+def _latex_auto_install_enabled() -> bool:
+    value = os.environ.get("KAOYAN_LATEX_AUTO_INSTALL")
+    if value is None:
+        return True
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _latex_render_timeout() -> int:
+    return _positive_int_env("KAOYAN_LATEX_TIMEOUT", 180)
+
+
+def _latex_install_timeout() -> int:
+    return _positive_int_env("KAOYAN_LATEX_INSTALL_TIMEOUT", 300)
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+@lru_cache(maxsize=8)
+def _is_miktex_xelatex(xelatex: str) -> bool:
+    try:
+        completed = subprocess.run(
+            [xelatex, "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            check=False,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    output = f"{completed.stdout}\n{completed.stderr}"
+    return "MiKTeX" in output
+
+
+def _resolve_mpm(xelatex: str) -> str | None:
+    found = shutil.which("mpm")
+    if found:
+        return found
+    xelatex_path = Path(xelatex)
+    candidates = [xelatex_path.with_name("mpm.exe"), xelatex_path.with_name("mpm")]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return None
+
+
+def _summarize_process(completed: subprocess.CompletedProcess[str]) -> str:
+    text = "\n".join(part for part in [completed.stdout, completed.stderr] if part)
+    return _summarize_log(text) or f"exit code {completed.returncode}"
 
 
 def build_practice_tex(payload: dict[str, Any]) -> str:

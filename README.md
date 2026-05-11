@@ -132,6 +132,30 @@ data/user/kaoyan_learning.sqlite
 $env:KAOYAN_APP_DB = "E:\path\to\kaoyan_learning.sqlite"
 ```
 
+## PDF 与 LaTeX 包
+
+“填写/综合题 PDF”功能使用本机 XeLaTeX。项目会在生成 PDF 前尝试为 MiKTeX 自动安装所需 LaTeX 包，默认包列表在 `master_prep_ai/kaoyan/pdf_renderer.py` 的 `_DEFAULT_LATEX_PACKAGES` 中。
+
+可以提前预热安装：
+
+```powershell
+python scripts/setup_latex.py
+```
+
+常用配置：
+
+```powershell
+$env:KAOYAN_LATEX_AUTO_INSTALL = "true"
+$env:KAOYAN_LATEX_TIMEOUT = "180"
+$env:KAOYAN_LATEX_INSTALL_TIMEOUT = "300"
+```
+
+如果 `xelatex.exe` 不在 PATH 中，可以设置：
+
+```powershell
+$env:KAOYAN_XELATEX_PATH = "C:\path\to\xelatex.exe"
+```
+
 ## 主要 API
 
 考研业务后端统一挂载在 `/api/v1/kaoyan` 下，主要接口包括：
