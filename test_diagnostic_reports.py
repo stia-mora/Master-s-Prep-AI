@@ -229,6 +229,53 @@ def test_practice_tex_escapes_chinese_and_latex_special_chars():
     assert "参考答案与解析" in tex
 
 
+
+def test_practice_tex_preserves_math_segments_and_normalizes_symbols():
+    tex = build_practice_tex(
+        {
+            "title": "Math PDF",
+            "questions": [
+                {
+                    "question_type": "填空题",
+                    "difficulty_level": 3,
+                    "stem": r"求 $\lim_{x\to0}\frac{x^2}{\sqrt{x+1}}$ ，并说明 x ≥ 0 且 x ≠ 1。",
+                    "answer": r"$\frac{1}{2}$",
+                    "analysis": "若 x≤1 ，则 $x^2 \\to 0$。\uffff",
+                }
+            ],
+        }
+    )
+
+    assert r"$\lim_{x\to0}\frac{x^2}{\sqrt{x+1}}$" in tex
+    assert r"x $\geq$ 0" in tex
+    assert r"x $\ne$ 1" in tex
+    assert r"x$\leq$1" in tex
+    assert "\uffff" not in tex
+    assert r"\textbackslash{}lim" not in tex
+
+
+def test_practice_tex_converts_fill_blanks_without_touching_subscripts():
+    tex = build_practice_tex(
+        {
+            "title": "Blank PDF",
+            "questions": [
+                {
+                    "question_type": "填空题",
+                    "difficulty_level": 3,
+                    "stem": r"$x_1 + x_2$；普通变量 x_1；答案为 \_\_\_\_；定义域为 ____。",
+                    "answer": r"$\_\_\_$",
+                    "analysis": r"空线 \_\_\_ 不应显示反斜杠。",
+                }
+            ],
+        }
+    )
+
+    assert tex.count(r"\underline{\hspace{2.8cm}}") == 4
+    assert r"$x_1 + x_2$" in tex
+    assert r"x\_1" in tex
+    assert r"\_\_\_" not in tex
+    assert "____" not in tex
+
 def test_render_practice_pdf_reports_missing_xelatex(monkeypatch):
     monkeypatch.delenv("KAOYAN_XELATEX_PATH", raising=False)
     monkeypatch.setattr("master_prep_ai.kaoyan.pdf_renderer.shutil.which", lambda name: None)
