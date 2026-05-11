@@ -59,7 +59,7 @@ services:
       - SEARCH_API_KEY=${SEARCH_API_KEY:-}
       - SEARCH_BASE_URL=${SEARCH_BASE_URL:-}
       # Kaoyan content database
-      - KAOYAN_CONTENT_DB=${KAOYAN_CONTENT_DB:-/math_content.sqlite}
+      - KAOYAN_CONTENT_DB=${KAOYAN_CONTENT_DB:-data/math_content.sqlite}
       # ============================================
       # Service Ports Configuration
       # ============================================
@@ -91,7 +91,7 @@ services:
       - ./data/user:/app/data/user
       - ./data/memory:/app/data/memory
       - ./data/knowledge_bases:/app/data/knowledge_bases
-      - ./data/math_content.sqlite:/math_content.sqlite:ro
+      - ./data/math_content.sqlite:/app/data/math_content.sqlite:ro
 
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:${BACKEND_PORT:-8001}/"]

@@ -108,16 +108,16 @@ master-prep-ai serve --port 8001
 
 ## 数据库与内容库
 
-考研高数内容库默认读取项目外层的：
+考研高数内容库默认读取项目内的相对路径：
 
 ```text
-../math_content.sqlite
+data/math_content.sqlite
 ```
 
-也可以通过环境变量指定：
+也可以通过环境变量指定 `data` 下的相对路径：
 
 ```powershell
-$env:KAOYAN_CONTENT_DB = "E:\path\to\math_content.sqlite"
+$env:KAOYAN_CONTENT_DB = "math_content.sqlite"
 ```
 
 学习行为数据默认写入：

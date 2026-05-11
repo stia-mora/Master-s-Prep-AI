@@ -35,11 +35,20 @@ def _repo_root() -> Path:
     return Path(__file__).resolve().parents[2]
 
 
+def _resolve_content_db_path(path: str | Path) -> Path:
+    candidate = Path(path)
+    if candidate.is_absolute():
+        return candidate
+    if candidate.parts and candidate.parts[0] == "data":
+        return _repo_root() / candidate
+    return _repo_root() / "data" / candidate
+
+
 def default_content_db_path() -> Path:
     configured = os.getenv("KAOYAN_CONTENT_DB")
     if configured:
-        return Path(configured)
-    return _repo_root().parent / "math_content.sqlite"
+        return _resolve_content_db_path(configured)
+    return _resolve_content_db_path("math_content.sqlite")
 
 
 def clean_content(value: Any) -> Any:
@@ -109,7 +118,7 @@ class KaoyanContentStore:
     """Query the prepared high-math content package without mutating it."""
 
     def __init__(self, db_path: str | Path | None = None) -> None:
-        self.db_path = Path(db_path) if db_path is not None else default_content_db_path()
+        self.db_path = _resolve_content_db_path(db_path) if db_path is not None else default_content_db_path()
 
     def _connect(self) -> sqlite3.Connection:
         if not self.db_path.exists():

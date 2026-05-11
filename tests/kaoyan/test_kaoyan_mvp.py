@@ -16,6 +16,22 @@ from master_prep_ai.kaoyan.practice import KaoyanPracticeService
 CONTENT_DB = default_content_db_path()
 
 
+def test_default_content_db_path_uses_project_data(monkeypatch) -> None:
+    expected = Path(__file__).resolve().parents[2] / "data" / "math_content.sqlite"
+
+    monkeypatch.delenv("KAOYAN_CONTENT_DB", raising=False)
+    assert default_content_db_path() == expected
+
+    monkeypatch.setenv("KAOYAN_CONTENT_DB", "math_content.sqlite")
+    assert default_content_db_path() == expected
+
+    monkeypatch.setenv("KAOYAN_CONTENT_DB", "data/math_content.sqlite")
+    assert default_content_db_path() == expected
+
+    assert KaoyanContentStore("math_content.sqlite").db_path == expected
+    assert KaoyanContentStore("data/math_content.sqlite").db_path == expected
+
+
 def test_content_store_reads_high_math_package() -> None:
     store = KaoyanContentStore(CONTENT_DB)
 
