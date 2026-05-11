@@ -358,14 +358,11 @@ class KaoyanLearningStore:
             ).fetchall()
         return [_row_to_dict(row) for row in rows]
 
-<<<<<<< HEAD
     def get_task(self, task_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM plan_task WHERE task_id = ? AND user_id = ?", (task_id, user_id)).fetchone()
         return _row_to_dict(row) if row else None
 
-=======
->>>>>>> 119a19f1a4d8666491536297b869396cbe7efd83
     def update_task_status(self, task_id: str, status: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
         now = utc_now()
         with self._connect() as conn:
