@@ -1,0 +1,21 @@
+# ============================================
+# Master Prep AI Python Dependencies (Runtime Bundle)
+# ============================================
+# Python >= 3.11 required
+#
+# Single source of truth: pyproject.toml `[project.optional-dependencies]`.
+# Files under requirements/ mirror those extras for Docker/CI installs that
+# don't yet have access to pyproject.toml + source code.
+#
+# Preferred install (from a source clone):
+#   pip install -e ".[cli]"            # CLI (RAG + providers + document parsing)
+#   pip install -e ".[server]"         # CLI + FastAPI/uvicorn (Web/API)
+#   pip install -e ".[tutorbot]"       # Server + TutorBot agent engine
+#   pip install -e ".[matrix]"         # Matrix channel for TutorBot (needs libolm)
+#   pip install -e ".[math-animator]"  # Manim animation engine (addon)
+#   pip install -e ".[dev]"            # Server + dev/test tools
+#   pip install -e ".[all]"            # Everything
+#
+# This file installs the full server runtime (CLI + API + TutorBot).
+
+-r requirements/tutorbot.txt

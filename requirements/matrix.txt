@@ -1,0 +1,20 @@
+# ============================================
+# Master Prep AI Matrix Channel — Dependencies
+# ============================================
+# Mirrors pyproject.toml `[project.optional-dependencies].matrix`.
+# Keep in sync with pyproject.toml when adding/updating dependencies.
+#
+# Preferred install (from a source clone): pip install -e ".[matrix]"
+# Use this file for Docker/CI when pyproject.toml/source code aren't yet available.
+#
+# Note: matrix-nio[e2e] requires the libolm native library. On macOS:
+#   brew install libolm
+# On Debian/Ubuntu:
+#   apt-get install libolm-dev
+
+-r tutorbot.txt
+
+# --- Matrix channel ---
+matrix-nio[e2e]>=0.25.2,<1.0.0
+mistune>=3.0.0,<4.0.0
+nh3>=0.2.18,<1.0.0
