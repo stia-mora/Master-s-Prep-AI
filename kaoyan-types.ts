@@ -132,6 +132,26 @@ export interface PracticeSession {
   ai_metadata?: Record<string, unknown>;
 }
 
+export type QuestionFamily = "choice" | "free_response";
+
+export interface PracticePdfRequest {
+  session_type?: "special" | "wrong_retry" | "similar";
+  knowledge_id?: string;
+  source_question_id?: string;
+  question_ids?: string[];
+  difficulty_level?: number;
+  limit?: number;
+}
+
+export interface PracticePdfPayload {
+  title: string;
+  filename: string;
+  questions: ContentQuestion[];
+  session_type?: string;
+  knowledge_id?: string;
+  question_family?: QuestionFamily;
+}
+
 export interface PracticeAnswerResult {
   question_id: string;
   knowledge_id: string;

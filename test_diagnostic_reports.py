@@ -1,9 +1,17 @@
 ﻿from __future__ import annotations
 
 from pathlib import Path
+import sqlite3
+from types import SimpleNamespace
 import uuid
 
+import pytest
+
+from master_prep_ai.api.routers import kaoyan as kaoyan_router
+from master_prep_ai.kaoyan.content_store import KaoyanContentStore
 from master_prep_ai.kaoyan.learning_store import KaoyanLearningStore
+from master_prep_ai.kaoyan.pdf_renderer import PdfRenderError, build_practice_tex, render_practice_pdf
+from master_prep_ai.kaoyan.practice import KaoyanPracticeService
 
 
 def _runtime_db(name: str) -> Path:
@@ -134,3 +142,124 @@ def test_diagnostic_report_compatibility_fields_are_derived():
     confirmed = store.confirm_diagnostic_report(report["report_id"], "user-a")
     latest = store.get_latest_confirmed_diagnostic_report("user-a")
     assert confirmed["report_id"] == latest["report_id"]
+
+
+def _content_db(name: str) -> Path:
+    path = _runtime_db(name)
+    with sqlite3.connect(path) as conn:
+        conn.execute(
+            """
+            CREATE TABLE knowledge_points (
+                knowledge_id TEXT PRIMARY KEY,
+                subject TEXT,
+                module TEXT,
+                chapter TEXT,
+                section TEXT,
+                knowledge_name TEXT,
+                parent_id TEXT,
+                importance_level INTEGER,
+                is_core INTEGER,
+                raw_markdown TEXT
+            )
+            """
+        )
+        conn.execute(
+            """
+            CREATE TABLE questions (
+                question_id TEXT PRIMARY KEY,
+                knowledge_id TEXT,
+                question_type TEXT,
+                difficulty_level INTEGER,
+                stem TEXT,
+                answer TEXT,
+                analysis TEXT,
+                source TEXT,
+                source_type TEXT,
+                year INTEGER
+            )
+            """
+        )
+        conn.execute("INSERT INTO knowledge_points VALUES ('K_LIMIT', 'math', '高数', '极限', '函数极限', '函数极限', '', 5, 1, '')")
+        rows = [
+            ("q_choice", "K_LIMIT", "选择题", 1, "下列正确的是\n(A) A\n(B) B", "A", "choice analysis", "test", "unit", 2025),
+            ("q_fill", "K_LIMIT", "填空题", 2, "求极限 ______", "1", "fill analysis", "test", "unit", 2025),
+            ("q_solution", "K_LIMIT", "综合题", 3, "证明函数连续", "略", "solution analysis", "test", "unit", 2025),
+        ]
+        conn.executemany("INSERT INTO questions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
+        conn.commit()
+    return path
+
+
+def test_online_practice_defaults_to_choice_questions_and_pdf_uses_free_response():
+    content = KaoyanContentStore(_content_db("question_family"))
+    learning = KaoyanLearningStore(_runtime_db("question_family_learning"))
+    service = KaoyanPracticeService(content, learning)
+
+    session = service.create_session(knowledge_id="K_LIMIT", limit=5, user_id="user-a")
+    assert session["questions"]
+    assert all(question["is_choice"] for question in session["questions"])
+
+    payload = service.create_pdf_payload(knowledge_id="K_LIMIT", limit=5, user_id="user-a")
+    assert {question["question_id"] for question in payload["questions"]} == {"q_fill", "q_solution"}
+    assert learning.get_practice_session(payload.get("session_id", ""), "user-a") is None
+
+    fixed_payload = service.create_pdf_payload(question_ids=["q_choice", "q_fill"], limit=5, user_id="user-a")
+    assert [question["question_id"] for question in fixed_payload["questions"]] == ["q_fill"]
+
+
+def test_practice_tex_escapes_chinese_and_latex_special_chars():
+    tex = build_practice_tex(
+        {
+            "title": "中文题单 & 100%",
+            "questions": [
+                {
+                    "question_type": "填空题",
+                    "difficulty_level": 2,
+                    "stem": "求 f(x)=x_1 的极限 #1",
+                    "answer": "1_0",
+                    "analysis": "注意 50% 与 {集合}",
+                }
+            ],
+        }
+    )
+
+    assert "\\documentclass[UTF8" in tex
+    assert "中文题单 \\& 100\\%" in tex
+    assert "x\\_1" in tex
+    assert "参考答案与解析" in tex
+
+
+def test_render_practice_pdf_reports_missing_xelatex(monkeypatch):
+    monkeypatch.delenv("KAOYAN_XELATEX_PATH", raising=False)
+    monkeypatch.setattr("master_prep_ai.kaoyan.pdf_renderer.shutil.which", lambda name: None)
+
+    with pytest.raises(PdfRenderError, match="XeLaTeX was not found"):
+        render_practice_pdf({"title": "PDF", "questions": []})
+
+
+@pytest.mark.asyncio
+async def test_practice_pdf_download_endpoint_returns_pdf(monkeypatch):
+    class FakeService:
+        def __init__(self, *_args, **_kwargs):
+            pass
+
+        def create_pdf_payload(self, **kwargs):
+            assert kwargs["user_id"] == "user-a"
+            assert kwargs["question_ids"] == ["q_fill"]
+            return {
+                "title": "PDF",
+                "filename": "practice.pdf",
+                "questions": [{"question_id": "q_fill", "question_type": "填空题", "stem": "题干"}],
+            }
+
+    monkeypatch.setattr(kaoyan_router, "KaoyanPracticeService", FakeService)
+    monkeypatch.setattr(kaoyan_router, "render_practice_pdf", lambda payload: b"%PDF-1.7\nok")
+
+    response = await kaoyan_router.download_practice_pdf(
+        kaoyan_router.PracticePdfRequest(question_ids=["q_fill"], limit=1),
+        SimpleNamespace(user_id="user-a"),
+    )
+
+    assert response.media_type == "application/pdf"
+    assert response.body.startswith(b"%PDF")
+    assert response.headers["content-disposition"] == 'attachment; filename="practice.pdf"'
