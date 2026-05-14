@@ -94,6 +94,29 @@ test("practice helpers route choice sessions and free-response pdf payloads", as
   assert.equal(blob.size > 0, true);
 });
 
+test("review helpers use calendar, hidden tests, and daily export endpoints", async () => {
+  const api = await loadKaoyanApi();
+  mockFetch({ start_date: "2026-05-14", end_date: "2026-05-14", days: [] });
+
+  await api.getReviewsCalendar("2026-05-14", "2026-05-14");
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/reviews/calendar?start=2026-05-14&end=2026-05-14");
+
+  mockFetch({ review_id: "rev_1", answer_hidden: true });
+  await api.startReviewTest("rev_1");
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/reviews/rev_1/start-test");
+  assert.equal(fetchCalls[0].init?.method, "POST");
+
+  mockFetch({ review_id: "rev_1", is_correct: true });
+  await api.submitReviewTest("rev_1", "A");
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/reviews/rev_1/submit-test");
+  assert.equal(fetchCalls[0].init?.body, JSON.stringify({ answer: "A" }));
+
+  mockFetch(new Uint8Array([37, 80, 68, 70]));
+  const blob = await api.downloadDailyReviewPdf("2026-05-14");
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/reviews/daily-export?date=2026-05-14&format=pdf");
+  assert.equal(blob.size > 0, true);
+});
+
 test("dashboard summary returns compatible optional member A fields", async () => {
   const api = await loadKaoyanApi();
   mockFetch({

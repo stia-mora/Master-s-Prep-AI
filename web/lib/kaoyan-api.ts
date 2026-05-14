@@ -18,7 +18,9 @@ import type {
   PracticePdfRequest,
   PracticeResult,
   PracticeSession,
+  ReviewCalendar,
   ReviewItem,
+  ReviewTest,
   StudyPlan,
   WrongQuestion,
 } from "./kaoyan-types";
@@ -183,11 +185,46 @@ export function getReviewsToday(): Promise<ReviewItem[]> {
   return request<ReviewItem[]>("/api/v1/kaoyan/reviews/today");
 }
 
+export function getReviewsCalendar(start?: string, end?: string): Promise<ReviewCalendar> {
+  const params = new URLSearchParams();
+  if (start) params.set("start", start);
+  if (end) params.set("end", end);
+  const query = params.toString();
+  return request<ReviewCalendar>(`/api/v1/kaoyan/reviews/calendar${query ? `?${query}` : ""}`);
+}
+
+export function startReviewTest(reviewId: string): Promise<ReviewTest> {
+  return request<ReviewTest>(`/api/v1/kaoyan/reviews/${reviewId}/start-test`, {
+    method: "POST",
+    body: JSON.stringify({}),
+  });
+}
+
+export function submitReviewTest(
+  reviewId: string,
+  answer: string,
+  imageDataUrl?: string,
+): Promise<ReviewItem> {
+  return request<ReviewItem>(`/api/v1/kaoyan/reviews/${reviewId}/submit-test`, {
+    method: "POST",
+    body: JSON.stringify({ answer, image_data_url: imageDataUrl }),
+  });
+}
+
 export function submitReview(reviewId: string, status: "reviewed" | "mastered" | "failed"): Promise<ReviewItem> {
   return request<ReviewItem>(`/api/v1/kaoyan/reviews/${reviewId}/submit`, {
     method: "POST",
     body: JSON.stringify({ status }),
   });
+}
+
+export function downloadDailyReviewPdf(date: string, includeAnswers = false): Promise<Blob> {
+  const params = new URLSearchParams({ date, format: "pdf" });
+  if (includeAnswers) {
+    params.set("include_answers", "true");
+    params.set("version", "teacher");
+  }
+  return requestBlob(`/api/v1/kaoyan/reviews/daily-export?${params.toString()}`);
 }
 
 export function createMaterialParseTask(input: { filename: string; content_type?: string }): Promise<MaterialParseTask> {

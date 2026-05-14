@@ -12,6 +12,7 @@ from typing import Any
 import uuid
 
 DEFAULT_USER_ID = "local-user"
+REVIEW_INTERVAL_DAYS = [1, 3, 7, 14, 30]
 
 
 def _repo_root() -> Path:
@@ -99,6 +100,46 @@ def _normalize_task_status(status: str) -> str:
         "deferred": "skipped",
     }
     return aliases.get(str(status or "").strip().lower(), "pending")
+
+
+def _review_due_date(value: str | None) -> str:
+    if not value:
+        return today_iso()
+    text = str(value)
+    try:
+        return datetime.fromisoformat(text.replace("Z", "+00:00")).date().isoformat()
+    except ValueError:
+        return text[:10] if len(text) >= 10 else today_iso()
+
+
+def _normalize_review_date(value: str | None, fallback: date | None = None) -> str:
+    if not value:
+        return (fallback or date.today()).isoformat()
+    try:
+        return date.fromisoformat(str(value)[:10]).isoformat()
+    except ValueError:
+        return (fallback or date.today()).isoformat()
+
+
+def _next_review_interval_days(previous_interval: int, passed: bool) -> int:
+    if not passed:
+        return REVIEW_INTERVAL_DAYS[0]
+    if previous_interval <= 0:
+        return REVIEW_INTERVAL_DAYS[0]
+    for interval in REVIEW_INTERVAL_DAYS:
+        if interval > previous_interval:
+            return interval
+    return REVIEW_INTERVAL_DAYS[-1]
+
+
+def _review_next_action(passed: bool, failure_streak: int) -> str:
+    if passed:
+        return ""
+    if failure_streak >= 3:
+        return "revisit_stage"
+    if failure_streak >= 2:
+        return "variant_practice"
+    return "review_foundation"
 
 
 class KaoyanLearningStore:
@@ -233,13 +274,21 @@ class KaoyanLearningStore:
                     user_id TEXT NOT NULL,
                     source_type TEXT NOT NULL,
                     source_id TEXT NOT NULL,
+                    stage_id TEXT NOT NULL DEFAULT '',
                     knowledge_id TEXT NOT NULL DEFAULT '',
                     title TEXT NOT NULL,
                     prompt TEXT NOT NULL DEFAULT '',
                     answer TEXT NOT NULL DEFAULT '',
                     priority_score REAL NOT NULL DEFAULT 1,
                     next_review_at TEXT NOT NULL,
+                    interval_days INTEGER NOT NULL DEFAULT 0,
                     review_count INTEGER NOT NULL DEFAULT 0,
+                    printable_count INTEGER NOT NULL DEFAULT 0,
+                    overdue_count INTEGER NOT NULL DEFAULT 0,
+                    failure_streak INTEGER NOT NULL DEFAULT 0,
+                    last_reviewed_at TEXT,
+                    last_result TEXT NOT NULL DEFAULT '',
+                    next_action TEXT NOT NULL DEFAULT '',
                     status TEXT NOT NULL DEFAULT 'pending',
                     created_at TEXT NOT NULL,
                     updated_at TEXT NOT NULL,
@@ -257,6 +306,22 @@ class KaoyanLearningStore:
                     last_practiced_at TEXT,
                     updated_at TEXT NOT NULL,
                     UNIQUE(user_id, knowledge_id)
+                );
+
+                CREATE TABLE IF NOT EXISTS stage_progress (
+                    progress_id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    stage_id TEXT NOT NULL DEFAULT '',
+                    knowledge_id TEXT NOT NULL DEFAULT '',
+                    status TEXT NOT NULL DEFAULT 'retention',
+                    mastery_score REAL NOT NULL DEFAULT 50,
+                    review_attempts INTEGER NOT NULL DEFAULT 0,
+                    review_correct_count INTEGER NOT NULL DEFAULT 0,
+                    review_wrong_count INTEGER NOT NULL DEFAULT 0,
+                    consecutive_review_failures INTEGER NOT NULL DEFAULT 0,
+                    next_action TEXT NOT NULL DEFAULT '',
+                    updated_at TEXT NOT NULL,
+                    UNIQUE(user_id, stage_id, knowledge_id)
                 );
 
                 CREATE TABLE IF NOT EXISTS diagnostic_report (
@@ -292,6 +357,7 @@ class KaoyanLearningStore:
                 CREATE INDEX IF NOT EXISTS idx_wrong_user ON wrong_question(user_id, review_status);
                 CREATE INDEX IF NOT EXISTS idx_review_due ON review_queue(user_id, status, next_review_at, priority_score DESC);
                 CREATE INDEX IF NOT EXISTS idx_mastery_user ON mastery_record(user_id, mastery_score);
+                CREATE INDEX IF NOT EXISTS idx_stage_progress_user ON stage_progress(user_id, stage_id, knowledge_id);
                 CREATE INDEX IF NOT EXISTS idx_diagnostic_report_user ON diagnostic_report(user_id, created_at DESC);
                 """
             )
@@ -316,6 +382,14 @@ class KaoyanLearningStore:
                 "recommendations_json",
                 "TEXT NOT NULL DEFAULT '[]'",
             )
+            self._ensure_column(conn, "review_queue", "stage_id", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "review_queue", "interval_days", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "review_queue", "printable_count", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "review_queue", "overdue_count", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "review_queue", "failure_streak", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "review_queue", "last_reviewed_at", "TEXT")
+            self._ensure_column(conn, "review_queue", "last_result", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "review_queue", "next_action", "TEXT NOT NULL DEFAULT ''")
             conn.commit()
 
     def _ensure_column(
@@ -629,13 +703,31 @@ class KaoyanLearningStore:
             now=now,
         )
 
-    def upsert_review_item(self, conn: sqlite3.Connection, *, user_id: str, source_type: str, source_id: str, knowledge_id: str, title: str, prompt: str, answer: str, priority_score: float, next_review_at: str, now: str) -> None:
+    def upsert_review_item(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        user_id: str,
+        source_type: str,
+        source_id: str,
+        knowledge_id: str,
+        title: str,
+        prompt: str,
+        answer: str,
+        priority_score: float,
+        next_review_at: str,
+        now: str,
+        stage_id: str = "",
+    ) -> None:
+        resolved_stage_id = stage_id or knowledge_id or source_id
         conn.execute(
             """
-            INSERT INTO review_queue (review_id, user_id, source_type, source_id, knowledge_id, title,
-                prompt, answer, priority_score, next_review_at, review_count, status, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 'pending', ?, ?)
+            INSERT INTO review_queue (review_id, user_id, source_type, source_id, stage_id, knowledge_id, title,
+                prompt, answer, priority_score, next_review_at, interval_days, review_count, status, created_at, updated_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0, 0, 'pending', ?, ?)
             ON CONFLICT(user_id, source_type, source_id) DO UPDATE SET
+                stage_id = CASE WHEN excluded.stage_id != '' THEN excluded.stage_id ELSE review_queue.stage_id END,
+                knowledge_id = CASE WHEN excluded.knowledge_id != '' THEN excluded.knowledge_id ELSE review_queue.knowledge_id END,
                 title = excluded.title,
                 prompt = excluded.prompt,
                 answer = excluded.answer,
@@ -644,7 +736,21 @@ class KaoyanLearningStore:
                 status = 'pending',
                 updated_at = excluded.updated_at
             """,
-            (f"rev_{uuid.uuid4().hex[:12]}", user_id, source_type, source_id, knowledge_id, title, prompt, answer, priority_score, next_review_at, now, now),
+            (
+                f"rev_{uuid.uuid4().hex[:12]}",
+                user_id,
+                source_type,
+                source_id,
+                resolved_stage_id,
+                knowledge_id,
+                title,
+                prompt,
+                answer,
+                priority_score,
+                next_review_at,
+                now,
+                now,
+            ),
         )
 
     def list_wrong_questions(self, user_id: str = DEFAULT_USER_ID) -> list[dict[str, Any]]:
@@ -652,39 +758,266 @@ class KaoyanLearningStore:
             rows = conn.execute("SELECT * FROM wrong_question WHERE user_id = ? ORDER BY review_status = 'mastered', wrong_count DESC, last_wrong_at DESC", (user_id,)).fetchall()
         return [_row_to_dict(row) for row in rows]
 
-    def list_reviews_today(self, user_id: str = DEFAULT_USER_ID) -> list[dict[str, Any]]:
+    def _review_dict(self, row: sqlite3.Row) -> dict[str, Any]:
+        item = _row_to_dict(row)
+        item["stage_id"] = item.get("stage_id") or item.get("knowledge_id") or item.get("source_id") or ""
+        item["interval_days"] = int(item.get("interval_days") or 0)
+        item["review_count"] = int(item.get("review_count") or 0)
+        item["printable_count"] = int(item.get("printable_count") or 0)
+        due_date = _review_due_date(item.get("next_review_at"))
+        overdue_days = (date.today() - date.fromisoformat(due_date)).days if due_date else 0
+        item["due_date"] = due_date
+        item["overdue_count"] = max(int(item.get("overdue_count") or 0), overdue_days)
+        return item
+
+    def get_review(self, review_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute("SELECT * FROM review_queue WHERE review_id = ? AND user_id = ?", (review_id, user_id)).fetchone()
+        return self._review_dict(row) if row else None
+
+    def list_reviews_for_date(
+        self,
+        target_date: str | None = None,
+        user_id: str = DEFAULT_USER_ID,
+        *,
+        limit: int = 50,
+    ) -> list[dict[str, Any]]:
+        due_date = _normalize_review_date(target_date)
         with self._connect() as conn:
             rows = conn.execute(
                 """
                 SELECT * FROM review_queue
                 WHERE user_id = ? AND status IN ('pending', 'failed')
+                  AND date(next_review_at) <= date(?)
                 ORDER BY priority_score DESC, next_review_at ASC
-                LIMIT 30
+                LIMIT ?
                 """,
-                (user_id,),
+                (user_id, due_date, max(1, min(int(limit), 200))),
             ).fetchall()
-        return [_row_to_dict(row) for row in rows]
+        return [self._review_dict(row) for row in rows]
+
+    def list_reviews_today(self, user_id: str = DEFAULT_USER_ID) -> list[dict[str, Any]]:
+        return self.list_reviews_for_date((date.today() + timedelta(days=1)).isoformat(), user_id, limit=30)
+
+    def list_review_calendar(
+        self,
+        user_id: str = DEFAULT_USER_ID,
+        *,
+        start_date: str | None = None,
+        end_date: str | None = None,
+    ) -> dict[str, Any]:
+        start = date.fromisoformat(_normalize_review_date(start_date))
+        end = date.fromisoformat(_normalize_review_date(end_date, start + timedelta(days=13)))
+        if end < start:
+            end = start
+        if (end - start).days > 90:
+            end = start + timedelta(days=90)
+        with self._connect() as conn:
+            rows = conn.execute(
+                """
+                SELECT * FROM review_queue
+                WHERE user_id = ? AND status IN ('pending', 'failed')
+                  AND date(next_review_at) <= date(?)
+                ORDER BY next_review_at ASC, priority_score DESC
+                """,
+                (user_id, end.isoformat()),
+            ).fetchall()
+        reviews = [self._review_dict(row) for row in rows]
+        days: list[dict[str, Any]] = []
+        current = start
+        while current <= end:
+            current_iso = current.isoformat()
+            due_items = [item for item in reviews if str(item.get("due_date") or "") <= current_iso]
+            overdue_items = [item for item in due_items if str(item.get("due_date") or "") < current_iso]
+            days.append(
+                {
+                    "date": current_iso,
+                    "due_count": len(due_items),
+                    "overdue_count": len(overdue_items),
+                    "printable_count": sum(int(item.get("printable_count") or 0) for item in due_items),
+                    "items": due_items[:50],
+                }
+            )
+            current += timedelta(days=1)
+        return {"start_date": start.isoformat(), "end_date": end.isoformat(), "days": days}
+
+    def mark_reviews_printed(self, review_ids: list[str], user_id: str = DEFAULT_USER_ID) -> None:
+        ids = [str(review_id) for review_id in review_ids if str(review_id)]
+        if not ids:
+            return
+        now = utc_now()
+        placeholders = ",".join("?" for _ in ids)
+        with self._connect() as conn:
+            conn.execute(
+                f"""
+                UPDATE review_queue
+                SET printable_count = printable_count + 1, updated_at = ?
+                WHERE user_id = ? AND review_id IN ({placeholders})
+                """,
+                tuple([now, user_id, *ids]),
+            )
+            conn.commit()
 
     def submit_review(self, review_id: str, status: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
+        return self.submit_review_result(
+            review_id,
+            status in {"mastered", "reviewed", "passed", "correct"},
+            user_id=user_id,
+            user_answer="",
+            grading={"grading_method": "legacy_status", "status": status},
+        )
+
+    def submit_review_result(
+        self,
+        review_id: str,
+        passed: bool,
+        *,
+        user_id: str = DEFAULT_USER_ID,
+        user_answer: str = "",
+        grading: dict[str, Any] | None = None,
+    ) -> dict[str, Any] | None:
         now = utc_now()
-        next_days = 3 if status == "mastered" else 1
-        next_review = (datetime.now(timezone.utc) + timedelta(days=next_days)).isoformat()
+        grading = grading or {}
         with self._connect() as conn:
             row = conn.execute("SELECT * FROM review_queue WHERE review_id = ? AND user_id = ?", (review_id, user_id)).fetchone()
             if row is None:
                 return None
-            final_status = "mastered" if status == "mastered" else "pending" if status == "reviewed" else "failed"
+            row_dict = self._review_dict(row)
+            next_interval = _next_review_interval_days(int(row_dict.get("interval_days") or 0), passed)
+            next_review = (datetime.now(timezone.utc) + timedelta(days=next_interval)).isoformat()
+            failure_streak = 0 if passed else int(row_dict.get("failure_streak") or 0) + 1
+            next_action = _review_next_action(passed, failure_streak)
+            final_status = "pending" if passed else "failed"
             conn.execute(
-                "UPDATE review_queue SET status = ?, review_count = review_count + 1, next_review_at = ?, updated_at = ? WHERE review_id = ? AND user_id = ?",
-                (final_status, next_review, now, review_id, user_id),
+                """
+                UPDATE review_queue
+                SET status = ?, review_count = review_count + 1, next_review_at = ?,
+                    interval_days = ?, failure_streak = ?, last_reviewed_at = ?,
+                    last_result = ?, next_action = ?, updated_at = ?
+                WHERE review_id = ? AND user_id = ?
+                """,
+                (
+                    final_status,
+                    next_review,
+                    next_interval,
+                    failure_streak,
+                    now,
+                    "passed" if passed else "failed",
+                    next_action,
+                    now,
+                    review_id,
+                    user_id,
+                ),
             )
-            if final_status in {"mastered", "failed"} and row["knowledge_id"]:
-                self._update_mastery(conn, row["knowledge_id"], final_status == "mastered", user_id, now)
-            if row["source_type"] == "wrong_question" and final_status == "mastered":
+            knowledge_id = str(row_dict.get("knowledge_id") or "")
+            if knowledge_id:
+                self._update_mastery(conn, knowledge_id, passed, user_id, now)
+            if row_dict["source_type"] == "wrong_question" and passed:
                 conn.execute("UPDATE wrong_question SET review_status = 'mastered' WHERE user_id = ? AND question_id = ?", (user_id, row["source_id"]))
+            elif row_dict["source_type"] == "wrong_question" and not passed:
+                conn.execute(
+                    """
+                    UPDATE wrong_question
+                    SET review_status = 'pending', wrong_count = wrong_count + 1,
+                        error_reason = ?, last_wrong_at = ?, next_review_at = ?
+                    WHERE user_id = ? AND question_id = ?
+                    """,
+                    (
+                        str(grading.get("error_reason") or "review_failed"),
+                        now,
+                        next_review,
+                        user_id,
+                        row_dict["source_id"],
+                    ),
+                )
+            self._upsert_stage_progress(
+                conn,
+                user_id=user_id,
+                stage_id=str(row_dict.get("stage_id") or ""),
+                knowledge_id=knowledge_id,
+                passed=passed,
+                failure_streak=failure_streak,
+                next_action=next_action,
+                now=now,
+            )
             updated = conn.execute("SELECT * FROM review_queue WHERE review_id = ? AND user_id = ?", (review_id, user_id)).fetchone()
             conn.commit()
-        return _row_to_dict(updated) if updated else None
+        result = self._review_dict(updated) if updated else None
+        if result is not None:
+            result["is_correct"] = bool(passed)
+            result["user_answer"] = user_answer
+            result["grading"] = grading
+        return result
+
+    def _upsert_stage_progress(
+        self,
+        conn: sqlite3.Connection,
+        *,
+        user_id: str,
+        stage_id: str,
+        knowledge_id: str,
+        passed: bool,
+        failure_streak: int,
+        next_action: str,
+        now: str,
+    ) -> None:
+        resolved_stage_id = stage_id or knowledge_id
+        if not resolved_stage_id and not knowledge_id:
+            return
+        mastery_row = conn.execute(
+            "SELECT mastery_score FROM mastery_record WHERE user_id = ? AND knowledge_id = ?",
+            (user_id, knowledge_id),
+        ).fetchone() if knowledge_id else None
+        mastery_score = float(mastery_row["mastery_score"]) if mastery_row else (60.0 if passed else 40.0)
+        conn.execute(
+            """
+            INSERT INTO stage_progress (
+                progress_id, user_id, stage_id, knowledge_id, status, mastery_score,
+                review_attempts, review_correct_count, review_wrong_count,
+                consecutive_review_failures, next_action, updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, 1, ?, ?, ?, ?, ?)
+            ON CONFLICT(user_id, stage_id, knowledge_id) DO UPDATE SET
+                status = excluded.status,
+                mastery_score = excluded.mastery_score,
+                review_attempts = review_attempts + 1,
+                review_correct_count = review_correct_count + excluded.review_correct_count,
+                review_wrong_count = review_wrong_count + excluded.review_wrong_count,
+                consecutive_review_failures = excluded.consecutive_review_failures,
+                next_action = excluded.next_action,
+                updated_at = excluded.updated_at
+            """,
+            (
+                f"stage_{uuid.uuid4().hex[:12]}",
+                user_id,
+                resolved_stage_id,
+                knowledge_id,
+                "retention_passed" if passed else "review_failed",
+                mastery_score,
+                1 if passed else 0,
+                0 if passed else 1,
+                failure_streak,
+                next_action,
+                now,
+            ),
+        )
+
+    def get_stage_progress(
+        self,
+        *,
+        user_id: str = DEFAULT_USER_ID,
+        stage_id: str = "",
+        knowledge_id: str = "",
+    ) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                """
+                SELECT * FROM stage_progress
+                WHERE user_id = ? AND stage_id = ? AND knowledge_id = ?
+                """,
+                (user_id, stage_id or knowledge_id, knowledge_id),
+            ).fetchone()
+        return _row_to_dict(row) if row else None
 
     def list_mastery_records(
         self,

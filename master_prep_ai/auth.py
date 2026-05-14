@@ -264,7 +264,7 @@ class AuthStore:
                         cols = {row[1] for row in conn.execute("PRAGMA table_info(notebook_categories)").fetchall()}
                         if "user_id" in cols:
                             conn.execute("UPDATE notebook_categories SET user_id = ? WHERE user_id = '' OR user_id = 'local-user' OR user_id IS NULL", (user_id,))
-                    for table in ["user_profile", "study_plan", "plan_task", "plan_task_version", "practice_session", "answer_record", "practice_record", "wrong_question", "review_queue", "mastery_record", "ai_action_log", "diagnostic_report"]:
+                    for table in ["user_profile", "study_plan", "plan_task", "plan_task_version", "practice_session", "answer_record", "practice_record", "wrong_question", "review_queue", "mastery_record", "stage_progress", "ai_action_log", "diagnostic_report"]:
                         if table not in tables:
                             continue
                         cols = {row[1] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
