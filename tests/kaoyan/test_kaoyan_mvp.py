@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+from datetime import date, timedelta
 from pathlib import Path
 import uuid
 
@@ -10,8 +11,10 @@ from fastapi.testclient import TestClient
 from master_prep_ai.api.routers import kaoyan as kaoyan_router
 from master_prep_ai.auth import AuthUser
 from master_prep_ai.kaoyan.content_store import KaoyanContentStore, default_content_db_path
-from master_prep_ai.kaoyan.learning_store import KaoyanLearningStore
+from master_prep_ai.kaoyan.learning_store import KaoyanLearningStore, today_iso, utc_now
+from master_prep_ai.kaoyan.pdf_renderer import render_review_pdf
 from master_prep_ai.kaoyan.practice import KaoyanPracticeService
+from master_prep_ai.kaoyan.review import KaoyanReviewService
 
 CONTENT_DB = default_content_db_path()
 
@@ -242,6 +245,227 @@ def test_kaoyan_feedback_interfaces(monkeypatch) -> None:
     )
     assert exam_submit.status_code == 200
     assert "score_report" in exam_submit.json()
+
+
+def test_member_a_review_calendar_retest_intervals_and_stage_signal() -> None:
+    content = KaoyanContentStore(CONTENT_DB)
+    learning = KaoyanLearningStore(_runtime_db("member_a_review"))
+    service = KaoyanReviewService(content, learning)
+    question = content.select_questions(question_family="choice", limit=1)[0]
+
+    now = utc_now()
+    with learning._connect() as conn:
+        learning.upsert_review_item(
+            conn,
+            user_id="review-user",
+            source_type="wrong_question",
+            source_id=question["question_id"],
+            knowledge_id=question["knowledge_id"],
+            title="Retention check",
+            prompt=question["stem"],
+            answer=question["answer"],
+            priority_score=5,
+            next_review_at=now,
+            now=now,
+        )
+        row = conn.execute(
+            "SELECT review_id FROM review_queue WHERE user_id = ? AND source_type = ? AND source_id = ?",
+            ("review-user", "wrong_question", question["question_id"]),
+        ).fetchone()
+        conn.execute("UPDATE review_queue SET stage_id = '' WHERE review_id = ?", (row["review_id"],))
+        conn.commit()
+
+    review = learning.list_reviews_for_date(today_iso(), "review-user")[0]
+    assert review["stage_id"] == question["knowledge_id"]
+
+    calendar = service.calendar("review-user", start_date=today_iso(), end_date=today_iso())
+    assert calendar["days"][0]["due_count"] == 1
+    assert calendar["days"][0]["items"][0]["review_id"] == review["review_id"]
+
+    started = service.start_test(review["review_id"], "review-user")
+    assert started is not None
+    assert started["answer_hidden"] is True
+    assert "answer" not in started["question"]
+
+    passed = asyncio.run(service.submit_test(review["review_id"], {"answer": question["answer"]}, "review-user"))
+    assert passed is not None
+    assert passed["is_correct"] is True
+    assert passed["interval_days"] == 1
+    assert passed["status"] == "pending"
+
+    first_fail = asyncio.run(service.submit_test(review["review_id"], {"answer": "__wrong__"}, "review-user"))
+    assert first_fail is not None
+    assert first_fail["interval_days"] == 1
+    assert first_fail["next_action"] == "review_foundation"
+
+    second_fail = asyncio.run(service.submit_test(review["review_id"], {"answer": "__wrong_again__"}, "review-user"))
+    assert second_fail is not None
+    assert second_fail["next_action"] == "variant_practice"
+
+    progress = learning.get_stage_progress(
+        user_id="review-user",
+        stage_id=question["knowledge_id"],
+        knowledge_id=question["knowledge_id"],
+    )
+    assert progress is not None
+    assert progress["status"] == "review_failed"
+    assert progress["next_action"] == "variant_practice"
+
+
+def test_member_a_review_calendar_manual_todos_by_date() -> None:
+    learning = KaoyanLearningStore(_runtime_db("member_a_todo"))
+    task = learning.create_manual_task(
+        title="Review calendar todo",
+        description="Print and annotate due reviews.",
+        due_at="2026-05-14",
+        task_type="review",
+        estimated_minutes=25,
+        related_knowledge_ids=["K_REVIEW"],
+        source_ref="review_calendar",
+        user_id="todo-user",
+    )
+
+    assert task["title"] == "Review calendar todo"
+    assert task["due_at"] == "2026-05-14"
+    assert task["related_knowledge_ids"] == ["K_REVIEW"]
+
+    day_tasks = learning.list_tasks_for_date("2026-05-14", "todo-user")
+    assert [item["task_id"] for item in day_tasks] == [task["task_id"]]
+    assert learning.list_tasks_for_date("2026-05-15", "todo-user") == []
+
+    updated = learning.update_task_status(task["task_id"], "completed", "todo-user")
+    assert updated is not None
+    assert updated["status"] == "completed"
+
+
+def test_member_a_review_calendar_keeps_today_and_future_queues_separate() -> None:
+    learning = KaoyanLearningStore(_runtime_db("member_a_calendar_days"))
+    today = date.today()
+    yesterday = today - timedelta(days=1)
+    tomorrow = today + timedelta(days=1)
+    with learning._connect() as conn:
+        learning.upsert_review_item(
+            conn,
+            user_id="calendar-user",
+            source_type="review_card",
+            source_id="card_overdue",
+            knowledge_id="K_OVERDUE",
+            title="Overdue card",
+            prompt="Overdue prompt",
+            answer="A",
+            priority_score=5,
+            next_review_at=yesterday.isoformat(),
+            now=utc_now(),
+        )
+        learning.upsert_review_item(
+            conn,
+            user_id="calendar-user",
+            source_type="review_card",
+            source_id="card_today",
+            knowledge_id="K_TODAY",
+            title="Today card",
+            prompt="Today prompt",
+            answer="B",
+            priority_score=4,
+            next_review_at=today.isoformat(),
+            now=utc_now(),
+        )
+        learning.upsert_review_item(
+            conn,
+            user_id="calendar-user",
+            source_type="review_card",
+            source_id="card_future",
+            knowledge_id="K_FUTURE",
+            title="Future card",
+            prompt="Future prompt",
+            answer="C",
+            priority_score=3,
+            next_review_at=tomorrow.isoformat(),
+            now=utc_now(),
+        )
+        conn.commit()
+    learning.create_manual_task(
+        title="Today calendar todo",
+        due_at=today.isoformat(),
+        user_id="calendar-user",
+    )
+    completed_task = learning.create_manual_task(
+        title="Completed calendar todo",
+        due_at=today.isoformat(),
+        user_id="calendar-user",
+    )
+    learning.update_task_status(completed_task["task_id"], "completed", "calendar-user")
+    learning.create_manual_task(
+        title="Future calendar todo",
+        due_at=tomorrow.isoformat(),
+        user_id="calendar-user",
+    )
+
+    today_queue = learning.list_reviews_today("calendar-user")
+    today_ids = {item["source_id"] for item in today_queue}
+    assert {"card_overdue", "card_today"} <= today_ids
+    assert "card_future" not in today_ids
+
+    calendar = learning.list_review_calendar(
+        "calendar-user",
+        start_date=today.isoformat(),
+        end_date=tomorrow.isoformat(),
+    )
+    current_day, future_day = calendar["days"]
+    assert {item["source_id"] for item in current_day["items"]} == {"card_overdue", "card_today"}
+    assert current_day["due_count"] == 2
+    assert current_day["overdue_count"] == 1
+    assert current_day["todo_count"] == 2
+    assert current_day["todo_open_count"] == 1
+    assert current_day["total_count"] == 4
+    assert current_day["open_count"] == 3
+    assert {item["source_id"] for item in future_day["items"]} == {"card_future"}
+    assert future_day["due_count"] == 1
+    assert future_day["overdue_count"] == 0
+    assert future_day["todo_count"] == 1
+    assert future_day["todo_open_count"] == 1
+    assert future_day["total_count"] == 2
+    assert future_day["open_count"] == 2
+
+
+def test_member_a_review_daily_export_pdf_hides_student_answers(monkeypatch) -> None:
+    monkeypatch.setattr(
+        "master_prep_ai.kaoyan.pdf_renderer._render_review_pdf_with_fitz",
+        lambda _payload: (_ for _ in ()).throw(ImportError()),
+    )
+    content = KaoyanContentStore(CONTENT_DB)
+    learning = KaoyanLearningStore(_runtime_db("member_a_export"))
+    service = KaoyanReviewService(content, learning)
+    now = utc_now()
+    with learning._connect() as conn:
+        learning.upsert_review_item(
+            conn,
+            user_id="export-user",
+            source_type="review_card",
+            source_id="card_secret",
+            knowledge_id="K_EXPORT",
+            title="Printable retention card",
+            prompt="State the key formula.",
+            answer="SECRET_ANSWER_42",
+            priority_score=4,
+            next_review_at=now,
+            now=now,
+            stage_id="stage-export",
+        )
+        conn.commit()
+
+    student_payload = service.daily_export_payload(today_iso(), include_answers=False, user_id="export-user")
+    student_pdf = render_review_pdf(student_payload)
+    assert student_pdf.startswith(b"%PDF")
+    assert b"SECRET_ANSWER_42" not in student_pdf
+
+    teacher_payload = service.daily_export_payload(today_iso(), include_answers=True, user_id="export-user")
+    teacher_pdf = render_review_pdf(teacher_payload)
+    assert b"SECRET_ANSWER_42" in teacher_pdf
+
+    empty_payload = service.daily_export_payload(today_iso(), include_answers=False, user_id="empty-export-user")
+    empty_pdf = render_review_pdf(empty_payload)
+    assert empty_pdf.startswith(b"%PDF")
 
 
 def test_member_a_profile_diagnostic_plan_dashboard_api(monkeypatch) -> None:

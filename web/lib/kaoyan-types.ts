@@ -329,14 +329,58 @@ export interface ReviewItem {
   review_id: string;
   source_type: string;
   source_id: string;
+  stage_id?: string;
   knowledge_id: string;
   title: string;
   prompt: string;
-  answer: string;
+  answer?: string;
   priority_score: number;
   next_review_at: string;
+  due_date?: string;
+  interval_days?: number;
   review_count: number;
+  printable_count?: number;
+  overdue_count?: number;
+  failure_streak?: number;
+  last_reviewed_at?: string | null;
+  last_result?: string;
+  next_action?: "review_foundation" | "variant_practice" | "revisit_stage" | string;
   status: string;
+  is_correct?: boolean;
+  answer_hidden?: boolean;
+  result?: PracticeAnswerResult;
+}
+
+export interface ReviewCalendarDay {
+  date: string;
+  due_count: number;
+  overdue_count: number;
+  todo_count?: number;
+  todo_open_count?: number;
+  total_count?: number;
+  open_count?: number;
+  printable_count: number;
+  items: ReviewItem[];
+}
+
+export interface ReviewCalendar {
+  start_date: string;
+  end_date: string;
+  days: ReviewCalendarDay[];
+}
+
+export interface ReviewTest {
+  review_id: string;
+  source_type: string;
+  source_id: string;
+  stage_id: string;
+  knowledge_id: string;
+  title: string;
+  prompt: string;
+  question?: ContentQuestion | null;
+  answer_hidden: boolean;
+  status: string;
+  next_review_at: string;
 }
 export interface PlanReorderResult {
   old_task_order: string[];

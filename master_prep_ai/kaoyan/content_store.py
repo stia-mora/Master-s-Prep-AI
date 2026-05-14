@@ -41,6 +41,8 @@ def _resolve_content_db_path(path: str | Path) -> Path:
         return candidate
     if candidate.parts and candidate.parts[0] == "data":
         return _repo_root() / candidate
+    if candidate.exists():
+        return candidate.resolve()
     return _repo_root() / "data" / candidate
 
 
