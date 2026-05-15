@@ -1,0 +1,285 @@
+from contextlib import asynccontextmanager
+import logging
+import mimetypes
+
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse, JSONResponse
+
+from master_prep_ai.logging import get_logger
+from master_prep_ai.services.path_service import get_path_service
+
+# Note: Don't set service_prefix here - start_web.py already adds [Backend] prefix
+logger = get_logger("API")
+
+
+class _SuppressWsNoise(logging.Filter):
+    """Suppress noisy uvicorn logs for WebSocket connection churn."""
+
+    _SUPPRESSED = ("connection open", "connection closed")
+
+    def filter(self, record: logging.LogRecord) -> bool:
+        msg = record.getMessage()
+        return not any(f in msg for f in self._SUPPRESSED)
+
+
+logging.getLogger("uvicorn.error").addFilter(_SuppressWsNoise())
+
+CONFIG_DRIFT_ERROR_TEMPLATE = (
+    "Configuration Drift Detected: Capability tool references {drift} are not "
+    "registered in the runtime tool registry. Register the missing tools or "
+    "remove the stale tool names from the capability manifests."
+)
+
+
+
+def validate_tool_consistency():
+    """
+    Validate that capability manifests only reference tools that are actually
+    registered in the runtime ``ToolRegistry``.
+    """
+    try:
+        from master_prep_ai.runtime.registry.capability_registry import get_capability_registry
+        from master_prep_ai.runtime.registry.tool_registry import get_tool_registry
+
+        capability_registry = get_capability_registry()
+        tool_registry = get_tool_registry()
+        available_tools = set(tool_registry.list_tools())
+
+        referenced_tools = set()
+        for manifest in capability_registry.get_manifests():
+            referenced_tools.update(manifest.get("tools_used", []) or [])
+
+        drift = referenced_tools - available_tools
+        if drift:
+            raise RuntimeError(CONFIG_DRIFT_ERROR_TEMPLATE.format(drift=drift))
+    except RuntimeError:
+        logger.exception("Configuration validation failed")
+        raise
+    except Exception:
+        logger.exception("Failed to load configuration for validation")
+        raise
+
+
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    """
+    Application lifecycle management
+    Gracefully handle startup and shutdown events, avoid CancelledError
+    """
+    # Execute on startup
+    logger.info("Application startup")
+
+    # Validate configuration consistency
+    validate_tool_consistency()
+
+    # Initialize LLM client early so OPENAI_* env vars are available before
+    # any downstream provider integrations start.
+    try:
+        from master_prep_ai.services.llm import get_llm_client
+
+        llm_client = get_llm_client()
+        logger.info(f"LLM client initialized: model={llm_client.config.model}")
+    except Exception as e:
+        logger.warning(f"Failed to initialize LLM client at startup: {e}")
+
+    try:
+        from master_prep_ai.events.event_bus import get_event_bus
+
+        event_bus = get_event_bus()
+        await event_bus.start()
+        logger.info("EventBus started")
+    except Exception as e:
+        logger.warning(f"Failed to start EventBus: {e}")
+
+    try:
+        from master_prep_ai.services.tutorbot import get_tutorbot_manager
+
+        await get_tutorbot_manager().auto_start_bots()
+    except Exception as e:
+        logger.warning(f"Failed to auto-start TutorBots: {e}")
+
+    yield
+
+    # Execute on shutdown
+    logger.info("Application shutdown")
+
+    # Stop TutorBots
+    try:
+        from master_prep_ai.services.tutorbot import get_tutorbot_manager
+
+        await get_tutorbot_manager().stop_all(preserve_auto_start=True)
+        logger.info("TutorBots stopped")
+    except Exception as e:
+        logger.warning(f"Failed to stop TutorBots: {e}")
+
+    # Stop EventBus
+    try:
+        from master_prep_ai.events.event_bus import get_event_bus
+
+        event_bus = get_event_bus()
+        await event_bus.stop()
+        logger.info("EventBus stopped")
+    except Exception as e:
+        logger.warning(f"Failed to stop EventBus: {e}")
+
+
+app = FastAPI(
+    title="Master Prep AI API",
+    version="1.0.0",
+    lifespan=lifespan,
+    # Disable automatic trailing slash redirects to prevent protocol downgrade issues
+    # when deployed behind HTTPS reverse proxies (e.g., nginx).
+    # Without this, FastAPI's 307 redirects may change HTTPS to HTTP.
+    # See: https://github.com/3171381144/Master-s-Prep-AI/issues/112
+    redirect_slashes=False,
+)
+
+@app.middleware("http")
+async def auth_context_middleware(request: Request, call_next):
+    from master_prep_ai.auth import current_user_context, get_auth_store, user_from_request
+
+    path = request.url.path
+    public_prefixes = ("/api/v1/auth",)
+    public_paths = {"/", "/api/v1/system/status"}
+    is_public = request.method == "OPTIONS" or path in public_paths or any(path.startswith(prefix) for prefix in public_prefixes)
+    user = user_from_request(request)
+    if user is None and not is_public and (path.startswith("/api/v1") or path.startswith("/api/attachments") or path.startswith("/api/outputs")):
+        detail = "Setup required" if not get_auth_store().has_users() else "Authentication required"
+        return JSONResponse({"detail": detail}, status_code=401)
+    with current_user_context(user.user_id if user else None):
+        return await call_next(request)
+
+# Log only non-200 requests (uvicorn access_log is disabled in run_server.py)
+_access_logger = logging.getLogger("uvicorn.access")
+
+
+@app.middleware("http")
+async def selective_access_log(request, call_next):
+    response = await call_next(request)
+    if response.status_code != 200:
+        _access_logger.info(
+            '%s - "%s %s HTTP/%s" %d',
+            request.client.host if request.client else "-",
+            request.method,
+            request.url.path,
+            request.scope.get("http_version", "1.1"),
+            response.status_code,
+        )
+    return response
+
+
+def _cors_origins() -> list[str]:
+    import os
+
+    configured = os.getenv("MASTER_PREP_AI_CORS_ORIGINS", "")
+    if configured.strip():
+        return [origin.strip() for origin in configured.split(",") if origin.strip()]
+    return [
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:3001",
+        "http://127.0.0.1:3001",
+    ]
+
+
+# Configure CORS
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cors_origins(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize user directories on startup. Public outputs are served through a
+# user-aware route below so authenticated users resolve files from their own root.
+path_service = get_path_service()
+try:
+    from master_prep_ai.services.setup import init_user_directories
+
+    init_user_directories()
+except Exception:
+    fallback_dir = path_service.get_public_outputs_root()
+    if not fallback_dir.exists():
+        fallback_dir.mkdir(parents=True)
+
+
+@app.get("/api/outputs/{output_path:path}")
+async def public_output(output_path: str):
+    target = path_service.resolve_public_output_path(output_path)
+    if target is None:
+        raise HTTPException(status_code=404, detail="Output not found")
+    media_type, _ = mimetypes.guess_type(target.name)
+    headers = {"Cache-Control": "private, max-age=0, must-revalidate"}
+    return FileResponse(
+        path=str(target),
+        media_type=media_type or "application/octet-stream",
+        headers=headers,
+    )
+
+# Import routers only after runtime settings are initialized.
+# Some router modules load YAML settings at import time.
+from master_prep_ai.api.routers import (
+    agent_config,
+    attachments,
+    auth,
+    book,
+    chat,
+    co_writer,
+    dashboard,
+    kaoyan,
+    knowledge,
+    memory,
+    notebook,
+    plugins_api,
+    question,
+    question_notebook,
+    sessions,
+    settings,
+    skills,
+    solve,
+    system,
+    tutorbot,
+    unified_ws,
+    vision_solver,
+)
+
+# Include routers
+app.include_router(auth.router, prefix="/api/v1/auth", tags=["auth"])
+app.include_router(solve.router, prefix="/api/v1", tags=["solve"])
+app.include_router(chat.router, prefix="/api/v1", tags=["chat"])
+app.include_router(question.router, prefix="/api/v1/question", tags=["question"])
+app.include_router(knowledge.router, prefix="/api/v1/knowledge", tags=["knowledge"])
+app.include_router(kaoyan.router, prefix="/api/v1/kaoyan", tags=["kaoyan"])
+app.include_router(dashboard.router, prefix="/api/v1/dashboard", tags=["dashboard"])
+app.include_router(co_writer.router, prefix="/api/v1/co_writer", tags=["co_writer"])
+app.include_router(notebook.router, prefix="/api/v1/notebook", tags=["notebook"])
+app.include_router(book.router, prefix="/api/v1/book", tags=["book"])
+app.include_router(memory.router, prefix="/api/v1/memory", tags=["memory"])
+app.include_router(sessions.router, prefix="/api/v1/sessions", tags=["sessions"])
+app.include_router(
+    question_notebook.router, prefix="/api/v1/question-notebook", tags=["question-notebook"]
+)
+app.include_router(settings.router, prefix="/api/v1/settings", tags=["settings"])
+app.include_router(skills.router, prefix="/api/v1/skills", tags=["skills"])
+app.include_router(system.router, prefix="/api/v1/system", tags=["system"])
+app.include_router(plugins_api.router, prefix="/api/v1/plugins", tags=["plugins"])
+app.include_router(agent_config.router, prefix="/api/v1/agent-config", tags=["agent-config"])
+app.include_router(vision_solver.router, prefix="/api/v1", tags=["vision-solver"])
+app.include_router(tutorbot.router, prefix="/api/v1/tutorbot", tags=["tutorbot"])
+app.include_router(attachments.router, prefix="/api/attachments", tags=["attachments"])
+
+# Unified WebSocket endpoint
+app.include_router(unified_ws.router, prefix="/api/v1", tags=["unified-ws"])
+
+
+@app.get("/")
+async def root():
+    return {"message": "Welcome to Master Prep AI API"}
+
+
+if __name__ == "__main__":
+    from master_prep_ai.api.run_server import main as run_server_main
+
+    run_server_main()
