@@ -120,9 +120,6 @@ export interface DashboardSummary {
   weak_knowledge_ids?: string[];
   recent_diagnostic_report?: DiagnosticReport | null;
   active_plan?: Omit<StudyPlan, "tasks"> | null;
-  portrait_summary?: Record<string, unknown>;
-  current_stage?: LearningStage | null;
-  learning_path_status?: string;
 }
 
 export interface PracticeSession {
@@ -132,80 +129,69 @@ export interface PracticeSession {
   knowledge_id: string;
   question_ids: string[];
   questions: ContentQuestion[];
+  source?: PracticeSource;
+  source_label?: string;
+  origin_id?: string;
+  stage_id?: string;
+  tab_id?: string;
   ai_metadata?: Record<string, unknown>;
 }
 
+export type QuestionFamily = "choice" | "free_response";
+export type PracticeSource = "stage" | "wrong_retry" | "knowledge" | "diagnostic";
+export type QuestionKind = "basic" | "variant" | "challenge";
+export type ExplainAgainMode = "basic" | "example" | "visual" | "mistake_based" | "analogy";
+
 export interface StageProgress {
-  user_id: string;
-  stage_id: string;
+  progress_id?: string;
+  user_id?: string;
+  stage_id?: string;
   mastery_score: number;
   passed: boolean;
   unlocked: boolean;
   attempt_count: number;
-  last_reason: {
-    summary?: string;
-    blockers?: string[];
-    metrics?: Record<string, number>;
-    threshold?: number;
-  };
-  next_action: string;
-  evidence: Array<Record<string, unknown>>;
+  last_reason: string;
   updated_at?: string;
 }
 
 export interface LearningStage {
-  id: string;
   stage_id: string;
   path_id: string;
-  user_id: string;
   knowledge_ids: string[];
   title: string;
   order_index: number;
-  unlock_rule: Record<string, unknown>;
+  unlock_rule?: Record<string, unknown>;
   pass_threshold: number;
-  context: {
-    stage_context?: Record<string, unknown>;
-    weakness_tags?: string[];
-    portrait_summary?: Record<string, unknown>;
-  };
   progress: StageProgress;
-  created_at?: string;
-  updated_at?: string;
 }
 
 export interface LearningPath {
-  id: string;
   path_id: string;
   user_id: string;
   status: string;
   goal: string;
-  source_snapshot_id: string;
-  portrait_summary: Record<string, unknown>;
-  evidence: Array<Record<string, unknown>>;
+  source_snapshot_id?: string;
   stages: LearningStage[];
   current_stage?: LearningStage | null;
   unlocked_stages?: LearningStage[];
-  created_at?: string;
-  updated_at?: string;
 }
 
-export interface StageStartResult {
-  stage: LearningStage;
-  practice_session: PracticeSession;
-}
-
-export interface StageSubmitResult {
+export interface ExplanationVariant {
+  variant_id: string;
   stage_id: string;
-  mastery_score: number;
-  passed: boolean;
-  unlock_next_stage: boolean;
-  next_action: string;
-  reason: StageProgress["last_reason"];
-  evidence: Array<Record<string, unknown>>;
-  practice_result?: PracticeResult | null;
+  mode: ExplainAgainMode;
+  content: string;
+  example_question?: ContentQuestion | Record<string, unknown>;
+  helpful?: boolean | null;
+  created_at: string;
+  ai_metadata?: { ai_used?: boolean; status?: string; message?: string };
 }
 
-export type QuestionFamily = "choice" | "free_response";
+export interface ExplainAgainResult {
+  stage_context: LearningStage;
+  explanation_variant: ExplanationVariant;
+  history: ExplanationVariant[];
+}
 
 export interface PracticePdfRequest {
   session_type?: "special" | "wrong_retry" | "similar";

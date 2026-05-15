@@ -244,6 +244,76 @@ def test_kaoyan_feedback_interfaces(monkeypatch) -> None:
     assert "score_report" in exam_submit.json()
 
 
+def test_member_c_stage_practice_and_explain_again(monkeypatch) -> None:
+    content = KaoyanContentStore(CONTENT_DB)
+    learning = KaoyanLearningStore(_runtime_db("member_c_stage"))
+
+    monkeypatch.setattr(kaoyan_router, "get_content_store", lambda: content)
+    monkeypatch.setattr(kaoyan_router, "get_learning_store", lambda: learning)
+
+    from master_prep_ai.kaoyan import ai_service
+
+    async def fail_complete(*args, **kwargs):
+        raise RuntimeError("no model in test")
+
+    monkeypatch.setattr(ai_service, "call_llm_complete", fail_complete)
+
+    app = FastAPI()
+    app.dependency_overrides[kaoyan_router.require_current_user] = lambda: AuthUser(
+        user_id="member-c", email="c@example.com", display_name="Member C", role="student"
+    )
+    app.include_router(kaoyan_router.router, prefix="/api/v1/kaoyan")
+    client = TestClient(app)
+
+    path = client.post("/api/v1/kaoyan/learning-path/refresh", json={"limit": 3}).json()
+    assert path["stages"]
+    stage = path["current_stage"]
+    assert stage["progress"]["unlocked"] is True
+
+    started = client.post(f"/api/v1/kaoyan/learning-path/stages/{stage['stage_id']}/start")
+    assert started.status_code == 200
+
+    generated = client.post(
+        "/api/v1/kaoyan/practice/generate",
+        json={
+            "source": "stage",
+            "stage_id": stage["stage_id"],
+            "question_kind": "challenge",
+            "tab_id": "stage-tab",
+            "limit": 2,
+        },
+    )
+    assert generated.status_code == 200
+    session = generated.json()
+    assert session["source"] == "stage"
+    assert session["stage_id"] == stage["stage_id"]
+    assert session["tab_id"] == "stage-tab"
+    assert session["questions"]
+    allowed = set(content.resolve_practice_knowledge_ids(stage["knowledge_ids"][0]))
+    assert {item["knowledge_id"] for item in session["questions"]}.issubset(allowed)
+
+    submitted = client.post(
+        f"/api/v1/kaoyan/practice/{session['session_id']}/submit",
+        json={"answers": [{"question_id": question["question_id"], "answer": "wrong"} for question in session["questions"]]},
+    )
+    assert submitted.status_code == 200
+
+    with learning._connect() as conn:
+        assert conn.execute("SELECT count(*) FROM stage_attempt WHERE user_id = 'member-c'").fetchone()[0] == 1
+
+    explain_a = client.post(
+        f"/api/v1/kaoyan/learning-path/stages/{stage['stage_id']}/explain-again",
+        json={"mode": "basic"},
+    )
+    explain_b = client.post(
+        f"/api/v1/kaoyan/learning-path/stages/{stage['stage_id']}/explain-again",
+        json={"mode": "example"},
+    )
+    assert explain_a.status_code == 200
+    assert explain_b.status_code == 200
+    assert explain_a.json()["explanation_variant"]["content"] != explain_b.json()["explanation_variant"]["content"]
+
+
 def test_member_a_profile_diagnostic_plan_dashboard_api(monkeypatch) -> None:
     content = KaoyanContentStore(CONTENT_DB)
     learning = KaoyanLearningStore(_runtime_db("member_a_api"))
