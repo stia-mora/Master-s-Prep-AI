@@ -4,6 +4,7 @@ import type {
   DiagnosticResult,
   DiagnosticReport,
   KaoyanChatContext,
+  LearningPath,
   RagQueryResult,
   PlanReorderResult,
   MaterialParseTask,
@@ -19,6 +20,8 @@ import type {
   PracticeResult,
   PracticeSession,
   ReviewItem,
+  StageStartResult,
+  StageSubmitResult,
   StudyPlan,
   WrongQuestion,
 } from "./kaoyan-types";
@@ -80,6 +83,34 @@ export function getDashboardSummary(): Promise<DashboardSummary> {
 
 export function generatePlan(): Promise<StudyPlan> {
   return request<StudyPlan>("/api/v1/kaoyan/plans/generate", { method: "POST" });
+}
+
+export function getLearningPath(): Promise<LearningPath> {
+  return request<LearningPath>("/api/v1/kaoyan/learning-path");
+}
+
+export function refreshLearningPath(): Promise<LearningPath> {
+  return request<LearningPath>("/api/v1/kaoyan/learning-path/refresh", { method: "POST" });
+}
+
+export function startStage(stageId: string): Promise<StageStartResult> {
+  return request<StageStartResult>(`/api/v1/kaoyan/learning-path/stages/${stageId}/start`, {
+    method: "POST",
+  });
+}
+
+export function submitStage(
+  stageId: string,
+  input: {
+    practice_session_id?: string;
+    session_id?: string;
+    answers?: Array<{ question_id: string; answer: string; image_data_url?: string }>;
+  } = {},
+): Promise<StageSubmitResult> {
+  return request<StageSubmitResult>(`/api/v1/kaoyan/learning-path/stages/${stageId}/submit`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 

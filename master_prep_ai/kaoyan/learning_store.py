@@ -55,6 +55,8 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "subjects_json",
         "weak_knowledge_ids_json",
         "recommendations_json",
+        "knowledge_ids_json",
+        "evidence_json",
     }
     for key in [
         "weak_modules_json",
@@ -67,6 +69,12 @@ def _row_to_dict(row: sqlite3.Row) -> dict[str, Any]:
         "weak_knowledge_ids_json",
         "score_summary_json",
         "recommendations_json",
+        "knowledge_ids_json",
+        "unlock_rule_json",
+        "context_json",
+        "portrait_summary_json",
+        "evidence_json",
+        "last_reason_json",
     ]:
         if key in data:
             data[key.replace("_json", "")] = _json_loads(
@@ -288,11 +296,53 @@ class KaoyanLearningStore:
                     created_at TEXT NOT NULL
                 );
 
+                CREATE TABLE IF NOT EXISTS learning_path (
+                    id TEXT PRIMARY KEY,
+                    user_id TEXT NOT NULL,
+                    status TEXT NOT NULL DEFAULT 'active',
+                    goal TEXT NOT NULL DEFAULT '',
+                    source_snapshot_id TEXT NOT NULL DEFAULT '',
+                    portrait_summary_json TEXT NOT NULL DEFAULT '{}',
+                    evidence_json TEXT NOT NULL DEFAULT '[]',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS learning_stage (
+                    id TEXT PRIMARY KEY,
+                    path_id TEXT NOT NULL,
+                    user_id TEXT NOT NULL,
+                    knowledge_ids_json TEXT NOT NULL DEFAULT '[]',
+                    title TEXT NOT NULL,
+                    order_index INTEGER NOT NULL,
+                    unlock_rule_json TEXT NOT NULL DEFAULT '{}',
+                    pass_threshold REAL NOT NULL DEFAULT 90,
+                    context_json TEXT NOT NULL DEFAULT '{}',
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL
+                );
+
+                CREATE TABLE IF NOT EXISTS stage_progress (
+                    user_id TEXT NOT NULL,
+                    stage_id TEXT NOT NULL,
+                    mastery_score REAL NOT NULL DEFAULT 0,
+                    passed INTEGER NOT NULL DEFAULT 0,
+                    unlocked INTEGER NOT NULL DEFAULT 0,
+                    attempt_count INTEGER NOT NULL DEFAULT 0,
+                    last_reason_json TEXT NOT NULL DEFAULT '{}',
+                    next_action TEXT NOT NULL DEFAULT '',
+                    evidence_json TEXT NOT NULL DEFAULT '[]',
+                    updated_at TEXT NOT NULL,
+                    PRIMARY KEY(user_id, stage_id)
+                );
+
                 CREATE INDEX IF NOT EXISTS idx_plan_task_due ON plan_task(user_id, due_at, status);
                 CREATE INDEX IF NOT EXISTS idx_wrong_user ON wrong_question(user_id, review_status);
                 CREATE INDEX IF NOT EXISTS idx_review_due ON review_queue(user_id, status, next_review_at, priority_score DESC);
                 CREATE INDEX IF NOT EXISTS idx_mastery_user ON mastery_record(user_id, mastery_score);
                 CREATE INDEX IF NOT EXISTS idx_diagnostic_report_user ON diagnostic_report(user_id, created_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_learning_path_user ON learning_path(user_id, status, updated_at DESC);
+                CREATE INDEX IF NOT EXISTS idx_learning_stage_path ON learning_stage(user_id, path_id, order_index);
                 """
             )
             self._ensure_column(conn, "user_profile", "subjects_json", "TEXT NOT NULL DEFAULT '[]'")
@@ -712,6 +762,318 @@ class KaoyanLearningStore:
                 tuple(params),
             ).fetchall()
         return [_row_to_dict(row) for row in rows]
+
+    def replace_learning_path(
+        self,
+        *,
+        user_id: str,
+        goal: str,
+        source_snapshot_id: str,
+        portrait_summary: dict[str, Any],
+        evidence: list[dict[str, Any]],
+        stages: list[dict[str, Any]],
+    ) -> dict[str, Any]:
+        now = utc_now()
+        path_id = f"path_{uuid.uuid4().hex[:12]}"
+        with self._connect() as conn:
+            conn.execute(
+                "UPDATE learning_path SET status = 'archived', updated_at = ? WHERE user_id = ? AND status = 'active'",
+                (now, user_id),
+            )
+            conn.execute(
+                """
+                INSERT INTO learning_path (
+                    id, user_id, status, goal, source_snapshot_id,
+                    portrait_summary_json, evidence_json, created_at, updated_at
+                ) VALUES (?, ?, 'active', ?, ?, ?, ?, ?, ?)
+                """,
+                (
+                    path_id,
+                    user_id,
+                    goal,
+                    source_snapshot_id,
+                    _json_dumps(portrait_summary),
+                    _json_dumps(evidence),
+                    now,
+                    now,
+                ),
+            )
+            for index, stage in enumerate(stages):
+                stage_id = f"stage_{uuid.uuid4().hex[:12]}"
+                knowledge_ids = [str(item) for item in stage.get("knowledge_ids", []) if str(item)]
+                conn.execute(
+                    """
+                    INSERT INTO learning_stage (
+                        id, path_id, user_id, knowledge_ids_json, title, order_index,
+                        unlock_rule_json, pass_threshold, context_json, created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    """,
+                    (
+                        stage_id,
+                        path_id,
+                        user_id,
+                        _json_dumps(knowledge_ids),
+                        str(stage.get("title") or f"Stage {index + 1}"),
+                        index,
+                        _json_dumps(stage.get("unlock_rule") or {"previous_stage_passed": index > 0}),
+                        float(stage.get("pass_threshold") or 90),
+                        _json_dumps(stage.get("context") or {}),
+                        now,
+                        now,
+                    ),
+                )
+                conn.execute(
+                    """
+                    INSERT INTO stage_progress (
+                        user_id, stage_id, mastery_score, passed, unlocked, attempt_count,
+                        last_reason_json, next_action, evidence_json, updated_at
+                    ) VALUES (?, ?, 0, 0, ?, 0, '{}', ?, '[]', ?)
+                    """,
+                    (user_id, stage_id, 1 if index == 0 else 0, "start_stage" if index == 0 else "locked", now),
+                )
+            conn.commit()
+        return self.get_active_learning_path(user_id) or {}
+
+    def get_active_learning_path(self, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            path = conn.execute(
+                """
+                SELECT *
+                FROM learning_path
+                WHERE user_id = ? AND status = 'active'
+                ORDER BY updated_at DESC
+                LIMIT 1
+                """,
+                (user_id,),
+            ).fetchone()
+            if path is None:
+                return None
+            stages = conn.execute(
+                """
+                SELECT *
+                FROM learning_stage
+                WHERE user_id = ? AND path_id = ?
+                ORDER BY order_index
+                """,
+                (user_id, path["id"]),
+            ).fetchall()
+            progress = conn.execute(
+                """
+                SELECT sp.*
+                FROM stage_progress sp
+                JOIN learning_stage ls ON ls.id = sp.stage_id
+                WHERE sp.user_id = ? AND ls.path_id = ?
+                """,
+                (user_id, path["id"]),
+            ).fetchall()
+        progress_by_stage = {row["stage_id"]: self._stage_progress_row_to_dict(row) for row in progress}
+        path_dict = _row_to_dict(path)
+        path_dict["path_id"] = path_dict["id"]
+        path_dict["stages"] = []
+        for row in stages:
+            stage = _row_to_dict(row)
+            stage["stage_id"] = stage["id"]
+            stage["progress"] = progress_by_stage.get(
+                stage["id"],
+                {
+                    "user_id": user_id,
+                    "stage_id": stage["id"],
+                    "mastery_score": 0.0,
+                    "passed": False,
+                    "unlocked": False,
+                    "attempt_count": 0,
+                    "last_reason": {},
+                    "next_action": "locked",
+                    "evidence": [],
+                },
+            )
+            path_dict["stages"].append(stage)
+        path_dict["current_stage"] = self._current_stage(path_dict["stages"])
+        return path_dict
+
+    def get_learning_stage(self, stage_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT * FROM learning_stage WHERE id = ? AND user_id = ?",
+                (stage_id, user_id),
+            ).fetchone()
+            progress = conn.execute(
+                "SELECT * FROM stage_progress WHERE stage_id = ? AND user_id = ?",
+                (stage_id, user_id),
+            ).fetchone()
+        if row is None:
+            return None
+        stage = _row_to_dict(row)
+        stage["stage_id"] = stage["id"]
+        stage["progress"] = self._stage_progress_row_to_dict(progress) if progress else None
+        return stage
+
+    def update_stage_progress(
+        self,
+        *,
+        user_id: str,
+        stage_id: str,
+        mastery_score: float,
+        passed: bool,
+        unlocked: bool,
+        reason: dict[str, Any],
+        next_action: str,
+        evidence: list[dict[str, Any]],
+        increment_attempt: bool = False,
+    ) -> dict[str, Any] | None:
+        now = utc_now()
+        with self._connect() as conn:
+            exists = conn.execute(
+                "SELECT 1 FROM learning_stage WHERE id = ? AND user_id = ?",
+                (stage_id, user_id),
+            ).fetchone()
+            if exists is None:
+                return None
+            conn.execute(
+                """
+                INSERT INTO stage_progress (
+                    user_id, stage_id, mastery_score, passed, unlocked, attempt_count,
+                    last_reason_json, next_action, evidence_json, updated_at
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                ON CONFLICT(user_id, stage_id) DO UPDATE SET
+                    mastery_score = excluded.mastery_score,
+                    passed = excluded.passed,
+                    unlocked = max(stage_progress.unlocked, excluded.unlocked),
+                    attempt_count = stage_progress.attempt_count + ?,
+                    last_reason_json = excluded.last_reason_json,
+                    next_action = excluded.next_action,
+                    evidence_json = excluded.evidence_json,
+                    updated_at = excluded.updated_at
+                """,
+                (
+                    user_id,
+                    stage_id,
+                    max(0.0, min(100.0, float(mastery_score))),
+                    1 if passed else 0,
+                    1 if unlocked else 0,
+                    1 if increment_attempt else 0,
+                    _json_dumps(reason),
+                    next_action,
+                    _json_dumps(evidence),
+                    now,
+                    1 if increment_attempt else 0,
+                ),
+            )
+            if passed:
+                next_stage = conn.execute(
+                    """
+                    SELECT next.id
+                    FROM learning_stage current
+                    JOIN learning_stage next
+                      ON next.path_id = current.path_id
+                     AND next.user_id = current.user_id
+                     AND next.order_index = current.order_index + 1
+                    WHERE current.id = ? AND current.user_id = ?
+                    """,
+                    (stage_id, user_id),
+                ).fetchone()
+                if next_stage is not None:
+                    conn.execute(
+                        """
+                        INSERT INTO stage_progress (
+                            user_id, stage_id, mastery_score, passed, unlocked, attempt_count,
+                            last_reason_json, next_action, evidence_json, updated_at
+                        ) VALUES (?, ?, 0, 0, 1, 0, '{}', 'start_stage', '[]', ?)
+                        ON CONFLICT(user_id, stage_id) DO UPDATE SET
+                            unlocked = 1,
+                            next_action = CASE
+                                WHEN stage_progress.passed = 1 THEN stage_progress.next_action
+                                ELSE 'start_stage'
+                            END,
+                            updated_at = excluded.updated_at
+                        """,
+                        (user_id, next_stage["id"], now),
+                    )
+            updated = conn.execute(
+                "SELECT * FROM stage_progress WHERE user_id = ? AND stage_id = ?",
+                (user_id, stage_id),
+            ).fetchone()
+            conn.commit()
+        return self._stage_progress_row_to_dict(updated) if updated else None
+
+    def collect_learning_path_signals(
+        self,
+        user_id: str = DEFAULT_USER_ID,
+        *,
+        knowledge_ids: list[str] | None = None,
+        limit: int = 80,
+    ) -> dict[str, Any]:
+        params: list[Any] = [user_id]
+        knowledge_clause = ""
+        if knowledge_ids:
+            filtered = [str(item) for item in knowledge_ids if str(item)]
+            if filtered:
+                knowledge_clause = "AND knowledge_id IN (" + ",".join("?" for _ in filtered) + ")"
+                params.extend(filtered)
+        with self._connect() as conn:
+            answers = conn.execute(
+                f"""
+                SELECT *
+                FROM answer_record
+                WHERE user_id = ? {knowledge_clause}
+                ORDER BY created_at DESC
+                LIMIT ?
+                """,
+                tuple(params + [max(1, min(int(limit), 200))]),
+            ).fetchall()
+            wrongs = conn.execute(
+                f"""
+                SELECT *
+                FROM wrong_question
+                WHERE user_id = ? {knowledge_clause}
+                ORDER BY review_status = 'mastered', wrong_count DESC, last_wrong_at DESC
+                """,
+                tuple(params),
+            ).fetchall()
+            reviews = conn.execute(
+                f"""
+                SELECT *
+                FROM review_queue
+                WHERE user_id = ? {knowledge_clause}
+                ORDER BY updated_at DESC
+                LIMIT ?
+                """,
+                tuple(params + [max(1, min(int(limit), 200))]),
+            ).fetchall()
+            mastery = conn.execute(
+                f"""
+                SELECT *
+                FROM mastery_record
+                WHERE user_id = ? {knowledge_clause}
+                ORDER BY mastery_score ASC, updated_at DESC
+                """,
+                tuple(params),
+            ).fetchall()
+        return {
+            "answers": [_row_to_dict(row) for row in answers],
+            "wrong_questions": [_row_to_dict(row) for row in wrongs],
+            "reviews": [_row_to_dict(row) for row in reviews],
+            "mastery_records": [_row_to_dict(row) for row in mastery],
+        }
+
+    def _stage_progress_row_to_dict(self, row: sqlite3.Row) -> dict[str, Any]:
+        data = dict(row)
+        data["passed"] = bool(data.get("passed"))
+        data["unlocked"] = bool(data.get("unlocked"))
+        data["last_reason"] = _json_loads(data.pop("last_reason_json", "{}"), {})
+        data["evidence"] = _json_loads(data.pop("evidence_json", "[]"), [])
+        return data
+
+    def _current_stage(self, stages: list[dict[str, Any]]) -> dict[str, Any] | None:
+        for stage in stages:
+            progress = stage.get("progress") or {}
+            if progress.get("unlocked") and not progress.get("passed"):
+                return stage
+        for stage in reversed(stages):
+            if (stage.get("progress") or {}).get("passed"):
+                return stage
+        return stages[0] if stages else None
+
     def dashboard_summary(self, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
         with self._connect() as conn:
             tasks = conn.execute("SELECT count(*) total, sum(status = 'completed') completed FROM plan_task WHERE user_id = ?", (user_id,)).fetchone()

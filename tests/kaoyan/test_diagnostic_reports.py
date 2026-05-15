@@ -9,6 +9,7 @@ import pytest
 
 from master_prep_ai.api.routers import kaoyan as kaoyan_router
 from master_prep_ai.kaoyan.content_store import KaoyanContentStore
+from master_prep_ai.kaoyan.learning_path import KaoyanLearningPathService
 from master_prep_ai.kaoyan.learning_store import KaoyanLearningStore
 from master_prep_ai.kaoyan.pdf_renderer import PdfRenderError, build_practice_tex, render_practice_pdf
 from master_prep_ai.kaoyan.practice import KaoyanPracticeService
@@ -142,6 +143,126 @@ def test_diagnostic_report_compatibility_fields_are_derived():
     confirmed = store.confirm_diagnostic_report(report["report_id"], "user-a")
     latest = store.get_latest_confirmed_diagnostic_report("user-a")
     assert confirmed["report_id"] == latest["report_id"]
+
+
+def test_learning_path_refresh_from_diagnostic():
+    content = KaoyanContentStore(_content_db("path_refresh_content"))
+    store = KaoyanLearningStore(_runtime_db("path_refresh"))
+    report = store.create_diagnostic_report(
+        user_id="user-a",
+        session_id="diag-a",
+        mode="light",
+        profile_snapshot={"target_school": "A"},
+        answer_summary={
+            "total": 1,
+            "correct": 0,
+            "accuracy": 0,
+            "answers": [{"question_id": "q_choice", "knowledge_id": "K_LIMIT", "is_correct": False}],
+        },
+        profile_draft={"baseline_level": "basic", "weak_modules": ["limits"]},
+        summary="A summary",
+    )
+    store.confirm_diagnostic_report(report["report_id"], "user-a")
+
+    path = KaoyanLearningPathService(content, store).refresh_learning_path("user-a")
+
+    assert path["status"] == "active"
+    assert path["source_snapshot_id"] == report["report_id"]
+    assert path["current_stage"]["progress"]["unlocked"] is True
+    assert len(path["stages"]) >= 1
+
+
+@pytest.mark.asyncio
+async def test_stage_submit_mastery_gate():
+    content = KaoyanContentStore(_content_db("stage_gate_content"))
+    store = KaoyanLearningStore(_runtime_db("stage_gate"))
+    service = KaoyanLearningPathService(content, store)
+    path = service.refresh_learning_path("user-a")
+    stage = path["current_stage"]
+
+    low = await service.submit_stage(stage["stage_id"], {"answers": []}, "user-a")
+    assert low is not None
+    assert low["passed"] is False
+    assert low["unlock_next_stage"] is False
+
+    session = store.create_practice_session(
+        "stage",
+        "Stage practice",
+        "K_LIMIT",
+        [f"q_pass_{index}" for index in range(10)],
+        user_id="user-a",
+    )
+    store.record_practice_submission(
+        session,
+        [
+            {
+                "question_id": f"q_pass_{index}",
+                "knowledge_id": "K_LIMIT",
+                "difficulty_level": 5,
+                "user_answer": "A",
+                "correct_answer": "A",
+                "is_correct": True,
+            }
+            for index in range(10)
+        ],
+        "all correct",
+        [],
+        "user-a",
+    )
+
+    high = await service.submit_stage(stage["stage_id"], {"answers": []}, "user-a")
+    assert high is not None
+    assert high["mastery_score"] >= 90
+    assert high["passed"] is True
+
+
+def test_learning_path_fallback_without_llm_and_user_isolation():
+    content = KaoyanContentStore(_content_db("path_isolation_content"))
+    store = KaoyanLearningStore(_runtime_db("path_isolation"))
+    service = KaoyanLearningPathService(content, store)
+
+    path_a = service.refresh_learning_path("user-a")
+    path_b = service.refresh_learning_path("user-b")
+
+    assert path_a["path_id"] != path_b["path_id"]
+    assert path_a["user_id"] == "user-a"
+    assert path_b["user_id"] == "user-b"
+    assert path_a["current_stage"]["progress"]["mastery_score"] >= 0
+    assert path_a["current_stage"]["progress"]["last_reason"]["summary"]
+
+
+@pytest.mark.asyncio
+async def test_learning_path_updates_after_practice_wrong_review():
+    content = KaoyanContentStore(_content_db("path_wrong_content"))
+    store = KaoyanLearningStore(_runtime_db("path_wrong"))
+    service = KaoyanLearningPathService(content, store)
+    path = service.refresh_learning_path("user-a")
+    stage = path["current_stage"]
+    session = store.create_practice_session("stage", "Stage practice", "K_LIMIT", ["q_wrong"], user_id="user-a")
+    store.record_practice_submission(
+        session,
+        [
+            {
+                "question_id": "q_wrong",
+                "knowledge_id": "K_LIMIT",
+                "difficulty_level": 3,
+                "user_answer": "B",
+                "correct_answer": "A",
+                "is_correct": False,
+                "error_reason": "concept confusion",
+            }
+        ],
+        "wrong",
+        [],
+        "user-a",
+    )
+
+    result = await service.submit_stage(stage["stage_id"], {"answers": []}, "user-a")
+
+    assert result is not None
+    assert result["passed"] is False
+    assert result["reason"]["blockers"]
+    assert any(item["type"] == "wrong_question" and item["count"] >= 1 for item in result["evidence"])
 
 
 def _content_db(name: str) -> Path:

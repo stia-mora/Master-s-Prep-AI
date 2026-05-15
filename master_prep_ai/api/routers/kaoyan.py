@@ -11,6 +11,7 @@ from master_prep_ai.auth import AuthUser, require_current_user
 from master_prep_ai.kaoyan.chat_context import KaoyanChatContextService
 from master_prep_ai.kaoyan.content_store import get_content_store
 from master_prep_ai.kaoyan.diagnostic import KaoyanDiagnosticService
+from master_prep_ai.kaoyan.learning_path import KaoyanLearningPathService
 from master_prep_ai.kaoyan.learning_store import get_learning_store
 from master_prep_ai.kaoyan.pdf_renderer import PdfRenderError, render_practice_pdf
 from master_prep_ai.kaoyan.planner import KaoyanPlanner
@@ -65,6 +66,12 @@ class AnswerItem(BaseModel):
 
 class PracticeSubmitRequest(BaseModel):
     answers: list[AnswerItem]
+
+
+class StageSubmitRequest(BaseModel):
+    practice_session_id: str | None = None
+    session_id: str | None = None
+    answers: list[AnswerItem | dict[str, Any]] = Field(default_factory=list)
 
 
 class DiagnosticSubmitRequest(BaseModel):
@@ -165,7 +172,57 @@ async def get_profile(user: AuthUser = Depends(require_current_user)) -> dict[st
 async def dashboard_summary(user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
     summary = _learning().dashboard_summary(user.user_id)
     summary["profile"] = _learning().get_profile(user.user_id)
+    path = _learning().get_active_learning_path(user.user_id)
+    summary["portrait_summary"] = (path or {}).get("portrait_summary") or {}
+    summary["current_stage"] = (path or {}).get("current_stage")
+    summary["learning_path_status"] = (path or {}).get("status") or "missing"
     return summary
+
+
+@router.get("/learning-path")
+async def get_learning_path(user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    service = KaoyanLearningPathService(_content(), _learning())
+    return service.get_learning_path(user.user_id)
+
+
+@router.post("/learning-path/refresh")
+async def refresh_learning_path(user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    service = KaoyanLearningPathService(_content(), _learning())
+    return service.refresh_learning_path(user.user_id)
+
+
+@router.post("/learning-path/stages/{stage_id}/start")
+async def start_learning_stage(stage_id: str, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    service = KaoyanLearningPathService(_content(), _learning())
+    result = service.start_stage(stage_id, user.user_id)
+    if result is None:
+        raise HTTPException(status_code=404, detail="Learning stage not found")
+    if result.get("error") == "stage_locked":
+        raise HTTPException(status_code=403, detail="Learning stage is locked")
+    if not (result.get("practice_session") or {}).get("questions"):
+        raise HTTPException(status_code=404, detail="No questions available for this learning stage")
+    return result
+
+
+@router.post("/learning-path/stages/{stage_id}/submit")
+async def submit_learning_stage(stage_id: str, request: StageSubmitRequest, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    service = KaoyanLearningPathService(_content(), _learning())
+    normalized_answers = [
+        item.model_dump() if isinstance(item, AnswerItem) else dict(item)
+        for item in request.answers
+    ]
+    result = await service.submit_stage(
+        stage_id,
+        {
+            "practice_session_id": request.practice_session_id,
+            "session_id": request.session_id,
+            "answers": normalized_answers,
+        },
+        user.user_id,
+    )
+    if result is None:
+        raise HTTPException(status_code=404, detail="Learning stage not found")
+    return result
 
 
 @router.post("/plans/generate")

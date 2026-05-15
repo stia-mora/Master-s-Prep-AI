@@ -120,6 +120,9 @@ export interface DashboardSummary {
   weak_knowledge_ids?: string[];
   recent_diagnostic_report?: DiagnosticReport | null;
   active_plan?: Omit<StudyPlan, "tasks"> | null;
+  portrait_summary?: Record<string, unknown>;
+  current_stage?: LearningStage | null;
+  learning_path_status?: string;
 }
 
 export interface PracticeSession {
@@ -130,6 +133,76 @@ export interface PracticeSession {
   question_ids: string[];
   questions: ContentQuestion[];
   ai_metadata?: Record<string, unknown>;
+}
+
+export interface StageProgress {
+  user_id: string;
+  stage_id: string;
+  mastery_score: number;
+  passed: boolean;
+  unlocked: boolean;
+  attempt_count: number;
+  last_reason: {
+    summary?: string;
+    blockers?: string[];
+    metrics?: Record<string, number>;
+    threshold?: number;
+  };
+  next_action: string;
+  evidence: Array<Record<string, unknown>>;
+  updated_at?: string;
+}
+
+export interface LearningStage {
+  id: string;
+  stage_id: string;
+  path_id: string;
+  user_id: string;
+  knowledge_ids: string[];
+  title: string;
+  order_index: number;
+  unlock_rule: Record<string, unknown>;
+  pass_threshold: number;
+  context: {
+    stage_context?: Record<string, unknown>;
+    weakness_tags?: string[];
+    portrait_summary?: Record<string, unknown>;
+  };
+  progress: StageProgress;
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface LearningPath {
+  id: string;
+  path_id: string;
+  user_id: string;
+  status: string;
+  goal: string;
+  source_snapshot_id: string;
+  portrait_summary: Record<string, unknown>;
+  evidence: Array<Record<string, unknown>>;
+  stages: LearningStage[];
+  current_stage?: LearningStage | null;
+  unlocked_stages?: LearningStage[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface StageStartResult {
+  stage: LearningStage;
+  practice_session: PracticeSession;
+}
+
+export interface StageSubmitResult {
+  stage_id: string;
+  mastery_score: number;
+  passed: boolean;
+  unlock_next_stage: boolean;
+  next_action: string;
+  reason: StageProgress["last_reason"];
+  evidence: Array<Record<string, unknown>>;
+  practice_result?: PracticeResult | null;
 }
 
 export type QuestionFamily = "choice" | "free_response";
