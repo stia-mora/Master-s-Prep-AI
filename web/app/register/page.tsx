@@ -6,6 +6,7 @@ import { useRouter } from "next/navigation";
 import { GraduationCap, Loader2, UserPlus } from "lucide-react";
 import { getBootstrap, register } from "@/lib/auth-api";
 import { useAuth } from "@/context/AuthContext";
+import { markNewUserTourPending } from "@/lib/onboarding";
 
 export default function RegisterPage() {
   const [email, setEmail] = useState("");
@@ -38,7 +39,8 @@ export default function RegisterPage() {
     }
     setLoading(true);
     try {
-      await register({ email, password, display_name: displayName });
+      const result = await register({ email, password, display_name: displayName });
+      markNewUserTourPending(result.user);
       await auth.refresh();
       router.replace("/kaoyan");
     } catch (err) {

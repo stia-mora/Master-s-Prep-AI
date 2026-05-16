@@ -811,7 +811,7 @@ class KaoyanLearningStore:
         )
 
     def _upsert_wrong_question(self, conn: sqlite3.Connection, item: dict[str, Any], user_id: str, now: str) -> None:
-        next_review = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        next_review = now
         conn.execute(
             """
             INSERT INTO wrong_question (wrong_id, user_id, question_id, knowledge_id, error_reason,
