@@ -13,7 +13,7 @@ from master_prep_ai.kaoyan.content_store import get_content_store
 from master_prep_ai.kaoyan.diagnostic import KaoyanDiagnosticService
 from master_prep_ai.kaoyan.learning_path import KaoyanLearningPathService
 from master_prep_ai.kaoyan.learning_store import get_learning_store
-from master_prep_ai.kaoyan.pdf_renderer import PdfRenderError, render_practice_pdf
+from master_prep_ai.kaoyan.pdf_renderer import PdfRenderError, render_practice_pdf, render_review_pdf
 from master_prep_ai.kaoyan.planner import KaoyanPlanner
 from master_prep_ai.kaoyan.practice import KaoyanPracticeService
 from master_prep_ai.kaoyan.review import KaoyanReviewService
@@ -91,8 +91,25 @@ class TaskStatusRequest(BaseModel):
     ]
 
 
+class TaskCreateRequest(BaseModel):
+    title: str = Field(default="复习待办", min_length=1, max_length=120)
+    description: str = ""
+    due_at: str
+    task_type: str = "review"
+    estimated_minutes: int = Field(default=30, ge=5, le=900)
+    priority_score: float = Field(default=2.0, ge=0.0, le=10.0)
+    related_knowledge_ids: list[str] = Field(default_factory=list)
+    source_ref: str = "manual_calendar"
+
+
 class ReviewSubmitRequest(BaseModel):
     status: Literal["reviewed", "mastered", "failed"]
+
+
+class ReviewTestSubmitRequest(BaseModel):
+    answer: str = ""
+    image_data_url: str | None = None
+    answers: list[AnswerItem] = Field(default_factory=list)
 
 
 class ChatContextRequest(BaseModel):
@@ -234,6 +251,29 @@ async def generate_plan(user: AuthUser = Depends(require_current_user)) -> dict[
 @router.get("/tasks/today")
 async def today_tasks(user: AuthUser = Depends(require_current_user)) -> list[dict[str, Any]]:
     return _learning().list_today_tasks(user.user_id)
+
+
+@router.get("/tasks")
+async def tasks_by_date(
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    user: AuthUser = Depends(require_current_user),
+) -> list[dict[str, Any]]:
+    return _learning().list_tasks_for_date(date, user.user_id)
+
+
+@router.post("/tasks")
+async def create_task(request: TaskCreateRequest, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    return _learning().create_manual_task(
+        title=request.title,
+        description=request.description,
+        due_at=request.due_at,
+        task_type=request.task_type,
+        estimated_minutes=request.estimated_minutes,
+        priority_score=request.priority_score,
+        related_knowledge_ids=request.related_knowledge_ids,
+        source_ref=request.source_ref,
+        user_id=user.user_id,
+    )
 
 
 @router.patch("/tasks/{task_id}/status")
@@ -416,12 +456,68 @@ async def reviews_today(user: AuthUser = Depends(require_current_user)) -> list[
     return KaoyanReviewService(_content(), _learning()).list_today(user.user_id)
 
 
+@router.get("/reviews/calendar")
+async def reviews_calendar(
+    start: str | None = Query(default=None),
+    end: str | None = Query(default=None),
+    user: AuthUser = Depends(require_current_user),
+) -> dict[str, Any]:
+    return KaoyanReviewService(_content(), _learning()).calendar(
+        user.user_id,
+        start_date=start,
+        end_date=end,
+    )
+
+
+@router.post("/reviews/{review_id}/start-test")
+async def start_review_test(review_id: str, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    review = KaoyanReviewService(_content(), _learning()).start_test(review_id, user.user_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review item not found")
+    return review
+
+
+@router.post("/reviews/{review_id}/submit-test")
+async def submit_review_test(review_id: str, request: ReviewTestSubmitRequest, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    review = await KaoyanReviewService(_content(), _learning()).submit_test(review_id, request.model_dump(), user.user_id)
+    if review is None:
+        raise HTTPException(status_code=404, detail="Review item not found")
+    return review
+
+
 @router.post("/reviews/{review_id}/submit")
 async def submit_review(review_id: str, request: ReviewSubmitRequest, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
     review = KaoyanReviewService(_content(), _learning()).submit(review_id, request.status, user.user_id)
     if review is None:
         raise HTTPException(status_code=404, detail="Review item not found")
     return review
+
+
+@router.get("/reviews/daily-export")
+async def reviews_daily_export(
+    date: str = Query(..., pattern=r"^\d{4}-\d{2}-\d{2}$"),
+    format: Literal["pdf"] = "pdf",
+    include_answers: bool = Query(default=False),
+    version: Literal["student", "teacher", "answers"] = Query(default="student"),
+    user: AuthUser = Depends(require_current_user),
+) -> Response:
+    if format != "pdf":
+        raise HTTPException(status_code=400, detail="Only PDF export is supported")
+    payload = KaoyanReviewService(_content(), _learning()).daily_export_payload(
+        date,
+        include_answers=include_answers or version in {"teacher", "answers"},
+        user_id=user.user_id,
+    )
+    try:
+        pdf_bytes = render_review_pdf(payload)
+    except PdfRenderError as exc:
+        raise HTTPException(status_code=500, detail=str(exc)) from exc
+    filename = str(payload.get("filename") or f"kaoyan-review-{date}.pdf").replace('"', "")
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
 
 @router.post("/plans/reorder")
 async def reorder_plan(request: PlanReorderRequest, user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:

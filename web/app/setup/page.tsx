@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { GraduationCap, Loader2, ShieldCheck } from "lucide-react";
 import { registerFirstAdmin } from "@/lib/auth-api";
 import { useAuth } from "@/context/AuthContext";
+import { markNewUserTourPending } from "@/lib/onboarding";
 
 export default function SetupPage() {
   const [email, setEmail] = useState("");
@@ -24,7 +25,8 @@ export default function SetupPage() {
     setLoading(true);
     setError("");
     try {
-      await registerFirstAdmin({ email, password, display_name: displayName });
+      const result = await registerFirstAdmin({ email, password, display_name: displayName });
+      markNewUserTourPending(result.user);
       await auth.refresh();
       router.replace("/kaoyan");
     } catch (err) {

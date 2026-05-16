@@ -3,7 +3,7 @@
 import Image from "next/image";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
-import { type ReactNode } from "react";
+import { type ReactNode, useState } from "react";
 import { useAppShell } from "@/context/AppShellContext";
 import { useAuth } from "@/context/AuthContext";
 import {
@@ -32,20 +32,21 @@ interface NavEntry {
   href: string;
   label: string;
   icon: LucideIcon;
+  tourId?: string;
 }
 
 const PRIMARY_NAV: NavEntry[] = [
-  { href: "/kaoyan", label: "考研助手", icon: GraduationCap },
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/agents", label: "TutorBot", icon: Bot },
-  { href: "/co-writer", label: "Co-Writer", icon: PenLine },
-  { href: "/book", label: "Book", icon: Library },
-  { href: "/knowledge", label: "Knowledge", icon: BookOpen },
-  { href: "/space", label: "Space", icon: LayoutGrid },
+  { href: "/kaoyan", label: "考研助手", icon: GraduationCap, tourId: "nav-kaoyan" },
+  { href: "/chat", label: "Chat", icon: MessageSquare, tourId: "nav-chat" },
+  { href: "/agents", label: "TutorBot", icon: Bot, tourId: "nav-agents" },
+  { href: "/co-writer", label: "Co-Writer", icon: PenLine, tourId: "nav-co-writer" },
+  { href: "/book", label: "Book", icon: Library, tourId: "nav-book" },
+  { href: "/knowledge", label: "Knowledge", icon: BookOpen, tourId: "nav-knowledge" },
+  { href: "/space", label: "Space", icon: LayoutGrid, tourId: "nav-space" },
 ];
 
 const SECONDARY_NAV: NavEntry[] = [
-  { href: "/settings", label: "Settings", icon: Settings },
+  { href: "/settings", label: "Settings", icon: Settings, tourId: "nav-settings" },
 ];
 const DEFAULT_SESSION_VIEWPORT_CLASS_NAME = "max-h-[112px]";
 const GITHUB_REPO_URL = "https://github.com/3171381144/Master-s-Prep-AI";
@@ -80,7 +81,8 @@ export function SidebarShell({
   const { t } = useTranslation();
   const { sidebarCollapsed: collapsed, setSidebarCollapsed: setCollapsed } =
     useAppShell();
-  const { user, logout } = useAuth();
+  const { logout } = useAuth();
+  const [loggingOut, setLoggingOut] = useState(false);
 
   const handleNewChat = () => {
     if (onNewChat) {
@@ -88,6 +90,16 @@ export function SidebarShell({
       return;
     }
     router.push("/chat");
+  };
+
+  const handleLogout = async () => {
+    if (loggingOut) return;
+    setLoggingOut(true);
+    try {
+      await logout();
+    } finally {
+      setLoggingOut(false);
+    }
   };
 
   /* ---- Collapsed state ---- */
@@ -121,6 +133,7 @@ export function SidebarShell({
         {/* New chat - visually distinct circular button */}
         <button
           onClick={handleNewChat}
+          data-tour-id="nav-new-chat"
           title={t("New Chat") as string}
           className="mb-2 flex h-9 w-9 items-center justify-center rounded-xl border border-[var(--border)]/50 bg-[var(--background)]/40 text-[var(--foreground)] shadow-sm transition-all duration-150 hover:border-[var(--border)] hover:bg-[var(--background)]/80"
           aria-label={t("New Chat")}
@@ -139,6 +152,7 @@ export function SidebarShell({
               <Link
                 key={item.href}
                 href={item.href}
+                data-tour-id={item.tourId}
                 title={t(item.label) as string}
                 className={`relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150 ${
                   active
@@ -166,6 +180,7 @@ export function SidebarShell({
               <Link
                 key={item.href}
                 href={item.href}
+                data-tour-id={item.tourId}
                 title={t(item.label) as string}
                 className={`relative flex h-9 w-9 items-center justify-center rounded-xl transition-all duration-150 ${
                   active
@@ -192,10 +207,12 @@ export function SidebarShell({
             <Github size={15} strokeWidth={1.6} />
           </a>
           <button
-            onClick={() => void logout()}
+            onClick={() => void handleLogout()}
+            disabled={loggingOut}
+            data-tour-id="nav-logout"
             title="Logout"
             aria-label="Logout"
-            className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)]"
+            className="mt-1 flex h-9 w-9 items-center justify-center rounded-xl text-[var(--muted-foreground)]/70 transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-50"
           >
             <LogOut size={15} strokeWidth={1.6} />
           </button>
@@ -237,6 +254,7 @@ export function SidebarShell({
           {/* New chat */}
           <button
             onClick={handleNewChat}
+            data-tour-id="nav-new-chat"
             className="flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--background)]/60 hover:text-[var(--foreground)]"
           >
             <Plus size={16} strokeWidth={2} />
@@ -256,6 +274,7 @@ export function SidebarShell({
               <div key={item.href}>
                 <Link
                   href={item.href}
+                  data-tour-id={item.tourId}
                   className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors ${
                     active
                       ? "bg-[var(--background)]/70 font-medium text-[var(--foreground)]"
@@ -298,6 +317,7 @@ export function SidebarShell({
             <Link
               key={item.href}
               href={item.href}
+              data-tour-id={item.tourId}
               className={`flex items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] transition-colors ${
                 active
                   ? "bg-[var(--background)]/70 font-medium text-[var(--foreground)]"
@@ -309,6 +329,16 @@ export function SidebarShell({
             </Link>
           );
         })}
+        <button
+          type="button"
+          onClick={() => void handleLogout()}
+          disabled={loggingOut}
+          data-tour-id="nav-logout"
+          className="mt-1 flex w-full items-center gap-2.5 rounded-lg px-3 py-2 text-[13.5px] text-[var(--muted-foreground)] transition-colors hover:bg-[var(--background)]/50 hover:text-[var(--foreground)] disabled:cursor-not-allowed disabled:opacity-50"
+        >
+          <LogOut size={16} strokeWidth={1.5} />
+          <span>{loggingOut ? t("退出中...") : t("退出登录")}</span>
+        </button>
         {footerSlot}
         <div className="mt-0.5 flex items-center gap-0.5">
           <VersionBadge />

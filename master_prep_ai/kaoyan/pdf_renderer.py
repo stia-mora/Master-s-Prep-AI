@@ -101,6 +101,120 @@ def render_practice_pdf(payload: dict[str, Any]) -> bytes:
         return pdf_path.read_bytes()
 
 
+def render_review_pdf(payload: dict[str, Any]) -> bytes:
+    """Render a daily review queue PDF.
+
+    This exporter intentionally defaults to a student sheet without answers.
+    It uses PyMuPDF when available and falls back to a small valid ASCII PDF so
+    empty queues and minimal installs can still export.
+    """
+    try:
+        return _render_review_pdf_with_fitz(payload)
+    except ImportError:
+        return _render_review_pdf_fallback(payload)
+    except Exception as exc:
+        raise PdfRenderError(f"Review PDF generation failed: {exc}") from exc
+
+
+def _render_review_pdf_with_fitz(payload: dict[str, Any]) -> bytes:
+    import fitz  # type: ignore[import-not-found]
+
+    doc = fitz.open()
+    include_answers = bool(payload.get("include_answers"))
+    items = list(payload.get("items") or [])
+    title = str(payload.get("title") or "Kaoyan review sheet")
+    date_label = str(payload.get("date") or "")
+    lines: list[str] = [title, f"Date: {date_label}", f"Items: {len(items)}"]
+    if not items:
+        lines.append("No review items due for this date.")
+    for index, item in enumerate(items, start=1):
+        lines.extend(
+            [
+                "",
+                f"{index}. {item.get('title') or item.get('review_id')}",
+                f"Stage: {item.get('stage_id') or '-'}    Knowledge: {item.get('knowledge_id') or '-'}    Status: {item.get('status') or '-'}",
+                str(item.get("prompt") or "No prompt."),
+            ]
+        )
+        if include_answers:
+            lines.append(f"Answer: {item.get('answer') or 'No answer.'}")
+    page = doc.new_page(width=595, height=842)
+    y = 42.0
+    for line in lines:
+        if y > 800:
+            page = doc.new_page(width=595, height=842)
+            y = 42.0
+        text = str(line)
+        rect = fitz.Rect(42, y, 553, min(y + 58, 820))
+        try:
+            written = page.insert_textbox(rect, text, fontsize=10.5, fontname="china-s", align=0)
+        except Exception:
+            written = -1
+        if written < 0:
+            page.insert_textbox(rect, _ascii_pdf_text(text), fontsize=10.5, fontname="helv", align=0)
+        y += max(18.0, min(64.0, 18.0 + len(text) / 42 * 10.0))
+    return doc.tobytes()
+
+
+def _render_review_pdf_fallback(payload: dict[str, Any]) -> bytes:
+    include_answers = bool(payload.get("include_answers"))
+    items = list(payload.get("items") or [])
+    lines = [
+        _ascii_pdf_text(payload.get("title") or "Kaoyan review sheet"),
+        f"Date: {_ascii_pdf_text(payload.get('date') or '')}",
+        f"Items: {len(items)}",
+    ]
+    if not items:
+        lines.append("No review items due for this date.")
+    for index, item in enumerate(items[:24], start=1):
+        lines.append(f"{index}. {_ascii_pdf_text(item.get('title') or item.get('review_id') or '')}")
+        lines.append(f"Stage: {_ascii_pdf_text(item.get('stage_id') or '-')}; Knowledge: {_ascii_pdf_text(item.get('knowledge_id') or '-')}")
+        lines.append(_ascii_pdf_text(item.get("prompt") or "No prompt.")[:180])
+        if include_answers:
+            lines.append(f"Answer: {_ascii_pdf_text(item.get('answer') or 'No answer.')[:180]}")
+    return _simple_text_pdf(lines)
+
+
+def _ascii_pdf_text(value: Any) -> str:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    return "".join(char if 32 <= ord(char) < 127 or char == "\n" else "?" for char in text)
+
+
+def _simple_text_pdf(lines: list[str]) -> bytes:
+    escaped_lines = [_pdf_escape(line[:220]) for line in lines[:46]]
+    text_ops = ["BT", "/F1 11 Tf", "50 790 Td", "14 TL"]
+    for line in escaped_lines:
+        text_ops.append(f"({line}) Tj")
+        text_ops.append("T*")
+    text_ops.append("ET")
+    stream = "\n".join(text_ops).encode("latin-1", errors="replace")
+    objects = [
+        b"<< /Type /Catalog /Pages 2 0 R >>",
+        b"<< /Type /Pages /Kids [3 0 R] /Count 1 >>",
+        b"<< /Type /Page /Parent 2 0 R /MediaBox [0 0 595 842] /Resources << /Font << /F1 4 0 R >> >> /Contents 5 0 R >>",
+        b"<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>",
+        b"<< /Length " + str(len(stream)).encode("ascii") + b" >>\nstream\n" + stream + b"\nendstream",
+    ]
+    chunks = [b"%PDF-1.4\n"]
+    offsets = [0]
+    for index, obj in enumerate(objects, start=1):
+        offsets.append(sum(len(chunk) for chunk in chunks))
+        chunks.append(f"{index} 0 obj\n".encode("ascii") + obj + b"\nendobj\n")
+    xref_offset = sum(len(chunk) for chunk in chunks)
+    chunks.append(f"xref\n0 {len(objects) + 1}\n".encode("ascii"))
+    chunks.append(b"0000000000 65535 f \n")
+    for offset in offsets[1:]:
+        chunks.append(f"{offset:010d} 00000 n \n".encode("ascii"))
+    chunks.append(
+        f"trailer\n<< /Size {len(objects) + 1} /Root 1 0 R >>\nstartxref\n{xref_offset}\n%%EOF\n".encode("ascii")
+    )
+    return b"".join(chunks)
+
+
+def _pdf_escape(value: str) -> str:
+    return value.replace("\\", r"\\").replace("(", r"\(").replace(")", r"\)")
+
+
 def ensure_latex_packages() -> dict[str, Any]:
     """Install the LaTeX packages needed by Kaoyan PDFs when MiKTeX is available."""
     xelatex = _resolve_xelatex()

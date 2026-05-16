@@ -1,4 +1,5 @@
 import { WorkspaceAuthGate } from "@/components/auth/WorkspaceAuthGate";
+import NewUserTour from "@/components/NewUserTour";
 import WorkspaceSidebar from "@/components/sidebar/WorkspaceSidebar";
 import { UnifiedChatProvider } from "@/context/UnifiedChatContext";
 
@@ -16,6 +17,7 @@ export default function WorkspaceLayout({
             {children}
           </main>
         </div>
+        <NewUserTour />
       </UnifiedChatProvider>
     </WorkspaceAuthGate>
   );

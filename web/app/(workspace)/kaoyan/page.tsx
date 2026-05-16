@@ -5,8 +5,8 @@ import { useRouter } from "next/navigation";
 import { BarChart3, BookOpenCheck, Brain, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Download, GraduationCap, Loader2, MessageCircleQuestion, PlayCircle, RefreshCw, RotateCcw, Sparkles, Target, Upload } from "lucide-react";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 import { useUnifiedChat } from "@/context/UnifiedChatContext";
-import { createDiagnosticSession, createKaoyanChatContext, createPracticePdf, createPracticeSession, downloadPracticePdf as downloadPracticePdfBlob, generatePlan, getDashboardSummary, getDiagnosticReports, confirmDiagnosticReport, getKnowledgeDetail, getKnowledgeTree, getLearningPath, getReviewsToday, getTodayTasks, getWrongQuestions, initProfile, refreshLearningPath, startStage, submitDiagnostic, submitPractice, submitReview, submitStage, updateTaskStatus } from "@/lib/kaoyan-api";
-import type { ContentQuestion, DashboardSummary, DiagnosticReport, DiagnosticResult, KaoyanProfile, KnowledgeDetail, KnowledgeNode, LearningPath, LearningStage, PlanTask, PracticePdfPayload, PracticeResult, PracticeSession, ProfileDraft, ReviewItem, WrongQuestion } from "@/lib/kaoyan-types";
+import { createDiagnosticSession, createKaoyanChatContext, createPracticePdf, createPracticeSession, createTask, downloadDailyReviewPdf, downloadPracticePdf as downloadPracticePdfBlob, generatePlan, getDashboardSummary, getDiagnosticReports, confirmDiagnosticReport, getKnowledgeDetail, getKnowledgeTree, getLearningPath, getReviewsCalendar, getReviewsToday, getTasksByDate, getTodayTasks, getWrongQuestions, initProfile, refreshLearningPath, startReviewTest, startStage, submitDiagnostic, submitPractice, submitReviewTest, submitStage, updateTaskStatus } from "@/lib/kaoyan-api";
+import type { ContentQuestion, DashboardSummary, DiagnosticReport, DiagnosticResult, KaoyanProfile, KnowledgeDetail, KnowledgeNode, LearningPath, LearningStage, PlanTask, PracticePdfPayload, PracticeResult, PracticeSession, ProfileDraft, ReviewCalendar, ReviewItem, ReviewTest, WrongQuestion } from "@/lib/kaoyan-types";
 
 const DEFAULT_PROFILE: KaoyanProfile = { target_school: "", target_major: "", exam_date: "2026-12-20", daily_minutes: 180, target_score: 120, baseline_level: "待诊断", weak_modules: [] };
 const tabs = [
@@ -26,6 +26,7 @@ type TaskProgress = { status: TaskProgressStatus; label: string; stage: string; 
 const IDLE_TASK_PROGRESS: TaskProgress = { status: "idle", label: "", stage: "", percent: 0 };
 
 function pct(value: number | undefined): string { return `${Math.round((value || 0) * 100)}%`; }
+function addDaysIso(value: string, days: number): string { const date = new Date(`${value}T00:00:00`); date.setDate(date.getDate() + days); return date.toISOString().slice(0, 10); }
 function flattenKnowledge(nodes: KnowledgeNode[]): KnowledgeNode[] { const out: KnowledgeNode[] = []; const walk = (items: KnowledgeNode[]) => { for (const item of items) { out.push(item); if (item.children?.length) walk(item.children); } }; walk(nodes); return out; }
 function isSelectableKnowledge(item: KnowledgeNode): boolean { return ["section", "subsection", "knowledge_point"].includes(item.node_type || "") || item.knowledge_id.includes("SEC"); }
 function findFirstSelectable(nodes: KnowledgeNode[]): KnowledgeNode | undefined { return flattenKnowledge(nodes).find(isSelectableKnowledge); }
@@ -91,6 +92,14 @@ export default function KaoyanPage() {
   const [profileDraft, setProfileDraft] = useState<ProfileDraft | null>(null);
   const [wrongQuestions, setWrongQuestions] = useState<WrongQuestion[]>([]);
   const [reviews, setReviews] = useState<ReviewItem[]>([]);
+  const [reviewDate, setReviewDate] = useState(() => new Date().toISOString().slice(0, 10));
+  const [reviewCalendar, setReviewCalendar] = useState<ReviewCalendar | null>(null);
+  const [reviewTasks, setReviewTasks] = useState<PlanTask[]>([]);
+  const [reviewTodoTitle, setReviewTodoTitle] = useState("");
+  const [reviewTodoDescription, setReviewTodoDescription] = useState("");
+  const [activeReviewTest, setActiveReviewTest] = useState<ReviewTest | null>(null);
+  const [reviewTestAnswer, setReviewTestAnswer] = useState("");
+  const [reviewTestResult, setReviewTestResult] = useState<ReviewItem | null>(null);
   const [loading, setLoading] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const [error, setError] = useState("");
@@ -105,12 +114,12 @@ export default function KaoyanPage() {
     try {
       const reportsPromise = getDiagnosticReports().catch(() => ({ reports: [] as DiagnosticReport[] }));
       const pathPromise = getLearningPath().catch(() => null);
-      const [tree, dashboard, today, wrong, reviewItems, reportItems, path] = await Promise.all([getKnowledgeTree(), getDashboardSummary(), getTodayTasks(), getWrongQuestions(), getReviewsToday(), reportsPromise, pathPromise]);
-      setKnowledgeTree(tree); setSummary(dashboard); setTasks(today); setWrongQuestions(wrong); setReviews(reviewItems); setDiagnosticReports(reportItems.reports || []); setLearningPath(path);
+      const [tree, dashboard, today, wrong, reviewItems, calendar, reviewTaskItems, reportItems, path] = await Promise.all([getKnowledgeTree(), getDashboardSummary(), getTodayTasks(), getWrongQuestions(), getReviewsToday(), getReviewsCalendar(reviewDate, addDaysIso(reviewDate, 13)), getTasksByDate(reviewDate), reportsPromise, pathPromise]);
+      setKnowledgeTree(tree); setSummary(dashboard); setTasks(today); setWrongQuestions(wrong); setReviews(reviewItems); setReviewCalendar(calendar); setReviewTasks(reviewTaskItems); setDiagnosticReports(reportItems.reports || []); setLearningPath(path);
       if (dashboard.profile) setProfile({ ...DEFAULT_PROFILE, ...dashboard.profile });
       if (!selectedKnowledgeId) { const first = findFirstSelectable(tree); if (first) setSelectedKnowledgeId(first.knowledge_id); }
     } catch (err) { setError(err instanceof Error ? err.message : "加载考研助手数据失败"); }
-  }, [selectedKnowledgeId]);
+  }, [reviewDate, selectedKnowledgeId]);
 
   useEffect(() => { void refresh(); }, [refresh]);
   useEffect(() => { if (!selectedKnowledgeId) return; getKnowledgeDetail(selectedKnowledgeId).then(setKnowledgeDetail).catch((err) => setError(err instanceof Error ? err.message : "加载知识点失败")); }, [selectedKnowledgeId]);
@@ -248,7 +257,10 @@ export default function KaoyanPage() {
     reader.readAsDataURL(file);
   }
 
-  async function handleReview(review: ReviewItem, status: "reviewed" | "mastered" | "failed") { setLoading(review.review_id); try { await submitReview(review.review_id, status); await refresh(); } catch (err) { setError(err instanceof Error ? err.message : "提交复习结果失败"); } finally { setLoading(null); } }
+  async function handleStartReview(review: ReviewItem) { setLoading(`review-test-${review.review_id}`); setError(""); setReviewTestResult(null); try { const test = await startReviewTest(review.review_id); setActiveReviewTest(test); setReviewTestAnswer(""); } catch (err) { setError(err instanceof Error ? err.message : "开始复检失败"); } finally { setLoading(null); } }
+  async function handleSubmitActiveReviewTest() { if (!activeReviewTest) return; setLoading(`review-submit-${activeReviewTest.review_id}`); setError(""); try { const result = await submitReviewTest(activeReviewTest.review_id, reviewTestAnswer); setReviewTestResult(result); setNotice(result.next_action ? `复检已写入，建议：${result.next_action}` : "复检已写入，下次复习时间已更新"); await refresh(); } catch (err) { setError(err instanceof Error ? err.message : "提交复检失败"); } finally { setLoading(null); } }
+  async function handleDownloadReviewPdf(includeAnswers = false) { setLoading(includeAnswers ? "review-pdf-teacher" : "review-pdf"); setError(""); try { const blob = await downloadDailyReviewPdf(reviewDate, includeAnswers); const url = URL.createObjectURL(blob); const anchor = document.createElement("a"); anchor.href = url; anchor.download = `kaoyan-review-${reviewDate}-${includeAnswers ? "answers" : "student"}.pdf`; document.body.appendChild(anchor); anchor.click(); anchor.remove(); URL.revokeObjectURL(url); } catch (err) { setError(err instanceof Error ? err.message : "导出复习 PDF 失败"); } finally { setLoading(null); } }
+  async function handleAddReviewTodo() { const title = reviewTodoTitle.trim() || `${reviewDate} 复习待办`; setLoading("review-add-todo"); setError(""); try { const queue = reviewCalendar?.days.find((item) => item.date === reviewDate)?.items || []; const knowledgeIds = Array.from(new Set(queue.map((item) => item.knowledge_id).filter(Boolean))); await createTask({ title, description: reviewTodoDescription, due_at: reviewDate, task_type: "review", estimated_minutes: 30, priority_score: 2.5, related_knowledge_ids: knowledgeIds, source_ref: "review_calendar" }); setReviewTodoTitle(""); setReviewTodoDescription(""); setNotice("待办已添加到该日期"); await refresh(); } catch (err) { setError(err instanceof Error ? err.message : "添加待办失败"); } finally { setLoading(null); } }
 
   async function handleAskAI(sourceType: ChatSourceType, sourceId: string, intent = "explain") {
     setLoading(`chat-${sourceId}`); setError("");
@@ -301,7 +313,7 @@ export default function KaoyanPage() {
         {activeTab === "practice" ? <PracticePanel practice={practice} pdfPayload={practicePdf} answers={answers} imageAnswers={imageAnswers} result={practiceResult} loading={loading} onAnswer={(questionId, answer) => setAnswers((prev) => ({ ...prev, [questionId]: answer }))} onImage={(questionId, event) => handleImageAnswer(questionId, event, "practice")} onCreate={() => void handleCreatePractice("special")} onCreatePdf={() => void handleCreatePracticePdf()} onDownloadPdf={() => void handleDownloadPracticePdf()} onRetry={() => void handleCreatePractice("wrong_retry")} onSubmit={() => void handleSubmitPractice()} onAskAI={(questionId) => void handleAskAI("question", questionId, "solve")} /> : null}
         {activeTab === "wrong" ? <section className="space-y-3"><div className="flex items-center justify-between"><h2 className="text-lg font-semibold">错题本</h2><button onClick={() => void handleCreatePractice("wrong_retry")} className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm text-[var(--primary-foreground)]">错题二刷</button></div>{wrongQuestions.length === 0 ? <Empty text="还没有错题。完成一次练习后，这里会自动归档。" /> : wrongQuestions.map((item) => <WrongCard key={item.wrong_id} item={item} loading={loading} onAskAI={(questionId) => void handleAskAI("question", questionId, "wrong_question_review")} />)}</section> : null}
         {activeTab === "reports" ? <ReportsPanel reports={diagnosticReports} loading={loading} onConfirm={(reportId) => void handleConfirmReport(reportId)} /> : null}
-        {activeTab === "review" ? <ReviewPanel reviews={reviews} onReview={handleReview} /> : null}
+        {activeTab === "review" ? <ReviewPanel reviews={reviews} calendar={reviewCalendar} selectedDate={reviewDate} tasks={reviewTasks} todoTitle={reviewTodoTitle} todoDescription={reviewTodoDescription} activeTest={activeReviewTest} testAnswer={reviewTestAnswer} testResult={reviewTestResult} loading={loading} onDateChange={setReviewDate} onTodoTitleChange={setReviewTodoTitle} onTodoDescriptionChange={setReviewTodoDescription} onAddTodo={handleAddReviewTodo} onTaskStatus={handleTaskStatus} onStart={handleStartReview} onAnswer={setReviewTestAnswer} onSubmitTest={handleSubmitActiveReviewTest} onDownloadPdf={handleDownloadReviewPdf} /> : null}
       </main>
     </div>
   );
@@ -351,5 +363,55 @@ function WrongCard({ item, loading, onAskAI }: { item: WrongQuestion; loading: s
 function ReportsPanel({ reports, loading, onConfirm }: { reports: DiagnosticReport[]; loading: string | null; onConfirm: (reportId: string) => void }) {
   return <section className="space-y-3"><h2 className="text-lg font-semibold">诊断历史报告</h2>{reports.length === 0 ? <Empty text="暂无诊断报告。完成一次入门诊断后，这里会保存画像草案和模块分数。" /> : reports.map((report) => <div key={report.report_id} className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><div className="font-medium">{report.mode === "deep" ? "30 分钟深诊断" : "5 分钟轻诊断"}</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">{new Date(report.created_at).toLocaleString()} · {report.confirmed ? "已确认" : "未确认"}</div></div><div className="flex items-center gap-3"><div className="text-sm font-semibold">{Math.round((report.answer_summary?.accuracy || 0) * 100)}%</div>{!report.confirmed ? <button onClick={() => onConfirm(report.report_id)} disabled={loading === `report-${report.report_id}`} className="inline-flex items-center gap-2 rounded-md bg-[var(--primary)] px-3 py-1.5 text-xs text-[var(--primary-foreground)]">{loading === `report-${report.report_id}` ? <Loader2 size={13} className="animate-spin" /> : <CheckCircle2 size={13} />} 确认画像</button> : null}</div></div><p className="mt-3 text-sm text-[var(--muted-foreground)]">{report.summary}</p><div className="mt-3 grid gap-2 md:grid-cols-2">{Object.entries(report.profile_draft?.module_scores || {}).map(([name, score]) => <div key={name} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm"><span>{name}</span><span className="float-right font-semibold">{score}</span></div>)}</div><DraftTags title="薄弱模块" items={report.profile_draft?.weak_modules || []} /><DraftTags title="计划重点" items={report.profile_draft?.plan_focus || []} /></div>)}</section>;
 }
-function ReviewPanel({ reviews, onReview }: { reviews: ReviewItem[]; onReview: (review: ReviewItem, status: "reviewed" | "mastered" | "failed") => void }) { return <section className="space-y-3"><h2 className="text-lg font-semibold">今日复习队列</h2>{reviews.length === 0 ? <Empty text="暂无待复习项。错题和低掌握度知识点会自动进入队列。" /> : reviews.map((review) => <div key={review.review_id} className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="font-medium">{review.title}</div><div className="text-xs text-[var(--muted-foreground)]">优先级 {review.priority_score.toFixed(1)} · 已复习 {review.review_count} 次</div></div><div className="flex gap-2"><button onClick={() => onReview(review, "failed")} className="rounded-md border px-3 py-1.5 text-xs">仍不熟</button><button onClick={() => onReview(review, "reviewed")} className="rounded-md border px-3 py-1.5 text-xs">已复习</button><button onClick={() => onReview(review, "mastered")} className="rounded-md bg-[var(--foreground)] px-3 py-1.5 text-xs text-[var(--background)]">已掌握</button></div></div><div className="mt-3 grid gap-3 lg:grid-cols-2"><MarkdownRenderer content={review.prompt || "暂无正面内容"} variant="compact" /><MarkdownRenderer content={review.answer || "暂无背面内容"} variant="compact" /></div></div>)}</section>; }
+type ReviewPanelProps = {
+  reviews: ReviewItem[];
+  calendar: ReviewCalendar | null;
+  selectedDate: string;
+  tasks: PlanTask[];
+  todoTitle: string;
+  todoDescription: string;
+  activeTest: ReviewTest | null;
+  testAnswer: string;
+  testResult: ReviewItem | null;
+  loading: string | null;
+  onDateChange: (date: string) => void;
+  onTodoTitleChange: (value: string) => void;
+  onTodoDescriptionChange: (value: string) => void;
+  onAddTodo: () => void;
+  onTaskStatus: (task: PlanTask, status: string) => void;
+  onStart: (review: ReviewItem) => void;
+  onAnswer: (answer: string) => void;
+  onSubmitTest: () => void;
+  onDownloadPdf: (includeAnswers?: boolean) => void;
+};
+
+function ReviewPanel({
+  reviews,
+  calendar,
+  selectedDate,
+  tasks,
+  todoTitle,
+  todoDescription,
+  activeTest,
+  testAnswer,
+  testResult,
+  loading,
+  onDateChange,
+  onTodoTitleChange,
+  onTodoDescriptionChange,
+  onAddTodo,
+  onTaskStatus,
+  onStart,
+  onAnswer,
+  onSubmitTest,
+  onDownloadPdf,
+}: ReviewPanelProps) {
+  const day = calendar?.days.find((item) => item.date === selectedDate);
+  const queue = day ? day.items : reviews;
+  const dueCount = day?.due_count ?? queue.length;
+  const overdueCount = day?.overdue_count ?? 0;
+  const prompt = activeTest?.question?.stem_without_options || activeTest?.question?.stem || activeTest?.prompt || "";
+
+  return <section className="space-y-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><h2 className="text-lg font-semibold">复习日历</h2><div className="text-xs text-[var(--muted-foreground)]">到期 {dueCount} 项 · 逾期 {overdueCount} 项 · 待办 {tasks.length} 项</div></div><div className="flex flex-wrap gap-2"><input type="date" value={selectedDate} onChange={(event) => onDateChange(event.target.value)} className="rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" /><button onClick={() => onDownloadPdf(false)} disabled={loading === "review-pdf"} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">{loading === "review-pdf" ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} 学生版 PDF</button><button onClick={() => onDownloadPdf(true)} disabled={loading === "review-pdf-teacher"} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm">{loading === "review-pdf-teacher" ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} 教师版 PDF</button></div></div>{calendar?.days?.length ? <div className="grid grid-cols-2 gap-2 md:grid-cols-7">{calendar.days.map((item) => <button key={item.date} type="button" onClick={() => onDateChange(item.date)} className={`rounded-lg border px-3 py-2 text-left text-xs transition-colors ${item.date === selectedDate ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]" : "hover:bg-[var(--muted)]"}`}><div className="font-medium">{item.date.slice(5)}</div><div className="mt-1 opacity-80">{item.due_count} 项</div>{item.overdue_count ? <div className="mt-1 text-[11px] opacity-80">逾期 {item.overdue_count}</div> : null}</button>)}</div> : null}<div className="grid gap-4 xl:grid-cols-[minmax(0,0.85fr)_minmax(0,1.15fr)]"><div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><div className="flex items-center justify-between gap-3"><div><h3 className="font-semibold">日期待办</h3><div className="text-xs text-[var(--muted-foreground)]">{selectedDate}</div></div><button type="button" onClick={onAddTodo} disabled={loading === "review-add-todo"} className="inline-flex items-center gap-2 rounded-lg bg-[var(--foreground)] px-3 py-2 text-sm text-[var(--background)]">{loading === "review-add-todo" ? <Loader2 size={14} className="animate-spin" /> : <CheckCircle2 size={14} />} 添加待办</button></div><div className="mt-4 space-y-2">{tasks.length === 0 ? <Empty text="这一天还没有手动待办。可以把线下复盘、错因整理或二刷提醒加到这里。" /> : tasks.map((task) => { const done = task.status === "completed" || task.status === "done"; return <div key={task.task_id} className="rounded-md border border-[var(--border)]/70 p-3 text-sm"><div className="flex items-start justify-between gap-3"><div className="min-w-0"><div className="truncate font-medium">{task.title}</div>{task.description ? <div className="mt-1 text-xs text-[var(--muted-foreground)]">{task.description}</div> : null}<div className="mt-2 text-xs text-[var(--muted-foreground)]">{task.task_type} · {task.estimated_minutes} 分钟 · {done ? "已完成" : "待完成"}</div></div><button type="button" onClick={() => onTaskStatus(task, done ? "pending" : "completed")} disabled={loading === task.task_id} className="shrink-0 rounded-md border px-2 py-1 text-xs hover:bg-[var(--muted)]">{loading === task.task_id ? "更新中" : done ? "重开" : "完成"}</button></div></div>; })}</div><div className="mt-4 grid gap-2"><input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" placeholder="待办标题，例如：整理今天错题" value={todoTitle} onChange={(event) => onTodoTitleChange(event.target.value)} /><textarea className="min-h-20 w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" placeholder="备注，可选" value={todoDescription} onChange={(event) => onTodoDescriptionChange(event.target.value)} /></div></div><div>{activeTest ? <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><div className="mb-2 text-sm font-semibold">{activeTest.title}</div><MarkdownRenderer content={prompt || "暂无题面"} variant="compact" />{activeTest.question?.options?.length ? <div className="mt-3 grid gap-2 md:grid-cols-2">{activeTest.question.options.map((option) => <button key={option.label} type="button" onClick={() => onAnswer(option.label)} className={`rounded-lg border px-3 py-2 text-left text-sm ${testAnswer === option.label ? "border-[var(--primary)] bg-[var(--primary)] text-[var(--primary-foreground)]" : "hover:bg-[var(--muted)]"}`}><span className="font-semibold">{option.label}. </span>{option.content}</button>)}</div> : <textarea className="mt-3 min-h-24 w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" placeholder="输入复检答案" value={testAnswer} onChange={(event) => onAnswer(event.target.value)} /> }<button onClick={onSubmitTest} disabled={loading === `review-submit-${activeTest.review_id}`} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[var(--foreground)] px-4 py-2 text-sm text-[var(--background)]">{loading === `review-submit-${activeTest.review_id}` ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} 提交复检</button>{testResult ? <div className="mt-3 rounded-md border border-[var(--border)]/70 p-3 text-sm"><div className={testResult.is_correct ? "text-emerald-600" : "text-[var(--destructive)]"}>{testResult.is_correct ? "复检通过" : "复检未通过"} · 下次 {testResult.next_review_at ? new Date(testResult.next_review_at).toLocaleDateString() : "待安排"}{testResult.next_action ? ` · ${testResult.next_action}` : ""}</div>{testResult.result?.ai_analysis ? <MarkdownRenderer content={testResult.result.ai_analysis} variant="compact" /> : null}</div> : null}</div> : <Empty text="选择队列中的关卡开始复检。复检时默认隐藏答案，提交后再写回掌握记录。" />}</div></div><div className="space-y-3"><h3 className="font-semibold">当天复习队列</h3>{queue.length === 0 ? <Empty text="暂无待复习项。错题和低掌握度知识点会自动进入队列，也可以在上方为这天添加手动待办。" /> : queue.map((review) => <div key={review.review_id} className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><div className="flex flex-wrap items-center justify-between gap-3"><div><div className="font-medium">{review.title}</div><div className="text-xs text-[var(--muted-foreground)]">阶段 {review.stage_id || review.knowledge_id || "-"} · 间隔 {review.interval_days || 1} 天 · 已复习 {review.review_count} 次{review.next_action ? ` · ${review.next_action}` : ""}</div></div><button onClick={() => onStart(review)} className="rounded-md bg-[var(--foreground)] px-3 py-1.5 text-xs text-[var(--background)]" disabled={loading === `review-test-${review.review_id}`}>{loading === `review-test-${review.review_id}` ? "加载中" : "开始复检"}</button></div><div className="mt-3"><MarkdownRenderer content={review.prompt || "暂无题面"} variant="compact" /></div></div>)}</div></section>;
+}
 function Empty({ text }: { text: string }) { return <div className="rounded-lg border border-dashed border-[var(--border)] bg-[var(--card)] p-6 text-sm text-[var(--muted-foreground)]">{text}</div>; }

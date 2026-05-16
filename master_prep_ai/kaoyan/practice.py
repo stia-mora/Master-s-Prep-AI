@@ -9,7 +9,7 @@ from .ai_service import KaoyanAIService
 from .content_store import KaoyanContentStore
 from .learning_store import DEFAULT_USER_ID, KaoyanLearningStore
 
-_OPTION_RE = re.compile(r"[A-DＡ-Ｄ]")
+_OPTION_TOKEN_RE = re.compile(r"(?<![A-Z])([A-D])(?![A-Z])")
 _OPTION_TRANSLATION = str.maketrans("ＡＢＣＤａｂｃｄ", "ABCDabcd")
 
 
@@ -57,9 +57,9 @@ def normalize_answer(value: str | None) -> str:
     text = str(value or "").strip().translate(_OPTION_TRANSLATION)
     if not text:
         return ""
-    option = _OPTION_RE.search(text.upper())
+    option = _OPTION_TOKEN_RE.search(text.upper())
     if option:
-        return option.group(0).upper()
+        return option.group(1).upper()
     return re.sub(r"\s+", "", text).strip("。；;,")
 
 
