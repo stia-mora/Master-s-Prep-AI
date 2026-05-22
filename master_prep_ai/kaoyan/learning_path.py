@@ -272,10 +272,10 @@ class KaoyanLearningPathService:
     def _reason(self, metrics: dict[str, float], score: float, threshold: float) -> dict[str, Any]:
         blockers: list[str] = []
         blocker_labels = {
-            "recent_accuracy_low": "???????",
-            "variant_stability_low": "????????",
-            "wrong_reason_still_active": "????????",
-            "review_retention_low": "???????",
+            "recent_accuracy_low": "近期正确率偏低",
+            "variant_stability_low": "变式题稳定性不足",
+            "wrong_reason_still_active": "错因仍未完全解决",
+            "review_retention_low": "复习保持率偏低",
         }
         if metrics["recent_accuracy"] < 0.8:
             blockers.append("recent_accuracy_low")
@@ -286,11 +286,11 @@ class KaoyanLearningPathService:
         if metrics["review_retention"] < 0.75:
             blockers.append("review_retention_low")
         if score >= threshold:
-            summary = "???????,????????"
+            summary = "已达到过关标准，下一关卡已解锁。"
         elif blockers:
-            summary = "????????:" + "?".join(blocker_labels.get(item, item) for item in blockers)
+            summary = "暂未达到过关标准：" + "、".join(blocker_labels.get(item, item) for item in blockers)
         else:
-            summary = "????????:?????????,???????????????"
+            summary = "暂未达到过关标准：请完成更多关卡练习，以便系统获得更充分的判断依据。"
         return {
             "summary": summary,
             "blockers": blockers,
@@ -303,19 +303,19 @@ class KaoyanLearningPathService:
             return reason
         summary = str(reason.get("summary") or "")
         blocker_labels = {
-            "recent_accuracy_low": "???????",
-            "variant_stability_low": "????????",
-            "wrong_reason_still_active": "????????",
-            "review_retention_low": "???????",
+            "recent_accuracy_low": "近期正确率偏低",
+            "variant_stability_low": "变式题稳定性不足",
+            "wrong_reason_still_active": "错因仍未完全解决",
+            "review_retention_low": "复习保持率偏低",
         }
         if summary == "Mastery gate passed. Next stage is unlocked.":
-            reason["summary"] = "???????,????????"
+            reason["summary"] = "已达到过关标准，下一关卡已解锁。"
         elif summary == "Mastery gate not passed: complete more stage practice for stronger evidence.":
-            reason["summary"] = "????????:?????????,???????????????"
+            reason["summary"] = "暂未达到过关标准：请完成更多关卡练习，以便系统获得更充分的判断依据。"
         elif summary.startswith("Mastery gate not passed: "):
             raw_blockers = summary.replace("Mastery gate not passed: ", "").split(",")
             labels = [blocker_labels.get(item.strip(), item.strip()) for item in raw_blockers if item.strip()]
-            reason["summary"] = "????????:" + "?".join(labels)
+            reason["summary"] = "暂未达到过关标准：" + "、".join(labels)
         return reason
 
     def _next_action(self, metrics: dict[str, float], passed: bool) -> str:

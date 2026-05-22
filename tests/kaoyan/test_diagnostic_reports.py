@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 from pathlib import Path
 import sqlite3
@@ -304,11 +304,11 @@ def _content_db(name: str) -> Path:
             )
             """
         )
-        conn.execute("INSERT INTO knowledge_points VALUES ('K_LIMIT', 'math', '??', '??', '????', '????', '', 5, 1, '')")
+        conn.execute("INSERT INTO knowledge_points VALUES ('K_LIMIT', 'math', '高数', '极限', '函数极限', '函数极限', '', 5, 1, '')")
         rows = [
-            ("q_choice", "K_LIMIT", "???", 1, "??????\n(A) A\n(B) B", "A", "choice analysis", "test", "unit", 2025),
-            ("q_fill", "K_LIMIT", "???", 2, "??? ______", "1", "fill analysis", "test", "unit", 2025),
-            ("q_solution", "K_LIMIT", "???", 3, "??????", "?", "solution analysis", "test", "unit", 2025),
+            ("q_choice", "K_LIMIT", "选择题", 1, "下列正确的是\n(A) A\n(B) B", "A", "choice analysis", "test", "unit", 2025),
+            ("q_fill", "K_LIMIT", "填空题", 2, "求极限 ______", "1", "fill analysis", "test", "unit", 2025),
+            ("q_solution", "K_LIMIT", "综合题", 3, "证明函数连续", "略", "solution analysis", "test", "unit", 2025),
         ]
         conn.executemany("INSERT INTO questions VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)", rows)
         conn.commit()
@@ -335,23 +335,23 @@ def test_online_practice_defaults_to_choice_questions_and_pdf_uses_free_response
 def test_practice_tex_escapes_chinese_and_latex_special_chars():
     tex = build_practice_tex(
         {
-            "title": "???? & 100%",
+            "title": "中文题单 & 100%",
             "questions": [
                 {
-                    "question_type": "???",
+                    "question_type": "填空题",
                     "difficulty_level": 2,
-                    "stem": "? f(x)=x_1 ??? #1",
+                    "stem": "求 f(x)=x_1 的极限 #1",
                     "answer": "1_0",
-                    "analysis": "?? 50% ? {??}",
+                    "analysis": "注意 50% 与 {集合}",
                 }
             ],
         }
     )
 
     assert "\\documentclass[UTF8" in tex
-    assert "???? \\& 100\\%" in tex
+    assert "中文题单 \\& 100\\%" in tex
     assert "x\\_1" in tex
-    assert "???????" in tex
+    assert "参考答案与解析" in tex
 
 
 
@@ -361,11 +361,11 @@ def test_practice_tex_preserves_math_segments_and_normalizes_symbols():
             "title": "Math PDF",
             "questions": [
                 {
-                    "question_type": "???",
+                    "question_type": "填空题",
                     "difficulty_level": 3,
-                    "stem": r"? $\lim_{x\to0}\frac{x^2}{\sqrt{x+1}}$ ,??? x ? 0 ? x ? 1?",
+                    "stem": r"求 $\lim_{x\to0}\frac{x^2}{\sqrt{x+1}}$ ，并说明 x ≥ 0 且 x ≠ 1。",
                     "answer": r"$\frac{1}{2}$",
-                    "analysis": "? x?1 ,? $x^2 \\to 0$?\uffff",
+                    "analysis": "若 x≤1 ，则 $x^2 \\to 0$。\uffff",
                 }
             ],
         }
@@ -385,11 +385,11 @@ def test_practice_tex_converts_fill_blanks_without_touching_subscripts():
             "title": "Blank PDF",
             "questions": [
                 {
-                    "question_type": "???",
+                    "question_type": "填空题",
                     "difficulty_level": 3,
-                    "stem": r"$x_1 + x_2$;???? x_1;??? \_\_\_\_;???? ____?",
+                    "stem": r"$x_1 + x_2$；普通变量 x_1；答案为 \_\_\_\_；定义域为 ____。",
                     "answer": r"$\_\_\_$",
-                    "analysis": r"?? \_\_\_ ????????",
+                    "analysis": r"空线 \_\_\_ 不应显示反斜杠。",
                 }
             ],
         }
@@ -421,7 +421,7 @@ async def test_practice_pdf_download_endpoint_returns_pdf(monkeypatch):
             return {
                 "title": "PDF",
                 "filename": "practice.pdf",
-                "questions": [{"question_id": "q_fill", "question_type": "???", "stem": "??"}],
+                "questions": [{"question_id": "q_fill", "question_type": "填空题", "stem": "题干"}],
             }
 
     monkeypatch.setattr(kaoyan_router, "KaoyanPracticeService", FakeService)

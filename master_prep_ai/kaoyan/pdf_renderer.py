@@ -1,420 +1,415 @@
-"""Learning path and mastery gate service for the Kaoyan loop."""
+"""PDF rendering for Kaoyan offline practice sheets."""
 
 from __future__ import annotations
 
-from collections import Counter
+from functools import lru_cache
+import os
+from pathlib import Path
+import re
+import shutil
+import subprocess
+import tempfile
 from typing import Any
 
-from .content_store import KaoyanContentStore
-from .learning_store import DEFAULT_USER_ID, KaoyanLearningStore
-from .practice import KaoyanPracticeService
 
-DEFAULT_PASS_THRESHOLD = 90.0
+class PdfRenderError(RuntimeError):
+    """Raised when the local LaTeX toolchain cannot render a practice PDF."""
 
 
-class KaoyanLearningPathService:
-    def __init__(self, content_store: KaoyanContentStore, learning_store: KaoyanLearningStore) -> None:
-        self.content_store = content_store
-        self.learning_store = learning_store
-        self.practice = KaoyanPracticeService(content_store, learning_store)
+_CONTROL_RE = re.compile(r"[\x00-\x08\x0b\x0c\x0e-\x1f]")
+_INVALID_RE = re.compile("[\uffff\ufffe]")
+_MATH_RE = re.compile(
+    r"(\$\$.*?\$\$|\\\[.*?\\\]|\\\(.*?\\\)|(?<!\\)\$(?!\$).*?(?<!\\)\$)",
+    re.S,
+)
+_BLANK_RE = re.compile(r"(?:(?:\\\\|\\)?_){3,}|_{3,}")
+_BLANK_TEX = r"\underline{\hspace{2.8cm}}"
+_TEXT_MATH_SYMBOLS = {
+    "≤": r"$\leq$",
+    "≥": r"$\geq$",
+    "∞": r"$\infty$",
+    "→": r"$\to$",
+    "←": r"$\leftarrow$",
+    "↔": r"$\leftrightarrow$",
+    "≠": r"$\ne$",
+    "≈": r"$\approx$",
+    "±": r"$\pm$",
+    "×": r"$\times$",
+    "÷": r"$\div$",
+    "∑": r"$\sum$",
+    "∫": r"$\int$",
+    "√": r"$\sqrt{\ }$",
+    "π": r"$\pi$",
+    "α": r"$\alpha$",
+    "β": r"$\beta$",
+    "γ": r"$\gamma$",
+    "δ": r"$\delta$",
+    "θ": r"$\theta$",
+    "λ": r"$\lambda$",
+}
+_MATH_SYMBOLS = {key: value.strip("$") for key, value in _TEXT_MATH_SYMBOLS.items()}
+_MATH_SYMBOLS.update({"’": "'", "′": "'", "−": "-", "，": ",", "。": "."})
 
-    def get_learning_path(self, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
-        path = self.learning_store.get_active_learning_path(user_id)
-        if path is None:
-            path = self.refresh_learning_path(user_id)
-        return self._with_stage_summaries(path, user_id)
 
-    def refresh_learning_path(self, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
-        profile = self.learning_store.get_profile(user_id) or {}
-        report = self.learning_store.get_latest_confirmed_diagnostic_report(user_id)
-        signals = self.learning_store.collect_learning_path_signals(user_id)
-        knowledge = self._select_knowledge_sequence(profile, report, signals)
-        portrait_summary = self._portrait_summary(profile, report, signals)
-        evidence = self._path_evidence(report, signals)
-        stages = [
-            {
-                "knowledge_ids": [item["knowledge_id"]],
-                "title": self._stage_title(index, item),
-                "pass_threshold": DEFAULT_PASS_THRESHOLD,
-                "unlock_rule": {"previous_stage_passed": index > 0, "pass_threshold": DEFAULT_PASS_THRESHOLD},
-                "context": {
-                    "stage_context": self._stage_context(item, profile, report, signals),
-                    "weakness_tags": self._weakness_tags(item["knowledge_id"], report, signals),
-                    "portrait_summary": portrait_summary,
-                },
-            }
-            for index, item in enumerate(knowledge)
-        ]
-        path = self.learning_store.replace_learning_path(
-            user_id=user_id,
-            goal=str(profile.get("target_major") or profile.get("target_school") or "kaoyan-math"),
-            source_snapshot_id=str((report or {}).get("report_id") or "fallback_snapshot"),
-            portrait_summary=portrait_summary,
-            evidence=evidence,
-            stages=stages,
-        )
-        for stage in path.get("stages", []):
-            self._recalculate_stage(stage, user_id, increment_attempt=False)
-        refreshed = self.learning_store.get_active_learning_path(user_id) or path
-        return self._with_stage_summaries(refreshed, user_id)
+_DEFAULT_LATEX_PACKAGES = (
+    "ctex",
+    "geometry",
+    "enumitem",
+    "fontspec",
+    "iftex",
+    "amsmath",
+    "amsfonts",
+    "mathtools",
+    "unicode-math",
+    "lm",
+    "fandol",
+)
 
-    def start_stage(self, stage_id: str, user_id: str = DEFAULT_USER_ID) -> dict[str, Any] | None:
-        stage = self.learning_store.get_learning_stage(stage_id, user_id)
-        if stage is None:
-            return None
-        progress = stage.get("progress") or {}
-        if not progress.get("unlocked"):
-            return {"stage": stage, "error": "stage_locked"}
-        knowledge_id = (stage.get("knowledge_ids") or [""])[0]
-        questions = self.content_store.select_questions(
-            knowledge_id=knowledge_id,
-            question_family="choice",
-            limit=5,
-        )
-        if not questions and knowledge_id:
-            questions = self.content_store.select_questions(question_family="choice", limit=5)
-        session = self.learning_store.create_practice_session(
-            session_type="stage",
-            title=f"Stage practice: {stage.get('title') or stage_id}",
-            knowledge_id=knowledge_id,
-            question_ids=[item["question_id"] for item in questions],
-            ai_meta={
-                "source": "learning_stage",
-                "stage_id": stage_id,
-                "path_id": stage.get("path_id"),
-                "knowledge_ids": stage.get("knowledge_ids") or [],
-            },
-            user_id=user_id,
-        )
-        session["questions"] = questions
-        return {"stage": stage, "practice_session": session}
 
-    async def submit_stage(
-        self,
-        stage_id: str,
-        payload: dict[str, Any],
-        user_id: str = DEFAULT_USER_ID,
-    ) -> dict[str, Any] | None:
-        stage = self.learning_store.get_learning_stage(stage_id, user_id)
-        if stage is None:
-            return None
-        practice_result = None
-        session_id = str(payload.get("practice_session_id") or payload.get("session_id") or "")
-        answers = payload.get("answers") or []
-        if session_id and answers:
-            practice_result = await self.practice.submit_session(session_id, answers, user_id)
-        elif isinstance(answers, list) and answers and all("is_correct" in item for item in answers if isinstance(item, dict)):
-            practice_result = {
-                "answers": answers,
-                "total_count": len(answers),
-                "correct_count": sum(1 for item in answers if item.get("is_correct")),
-            }
-        progress = self._recalculate_stage(stage, user_id, increment_attempt=True)
-        if progress is None:
-            return None
-        next_stage_unlocked = False
-        path = self.learning_store.get_active_learning_path(user_id)
-        if path:
-            stages = path.get("stages") or []
-            for index, item in enumerate(stages):
-                if item.get("stage_id") == stage_id and index + 1 < len(stages):
-                    next_stage_unlocked = bool((stages[index + 1].get("progress") or {}).get("unlocked"))
-                    break
-        return {
-            "stage_id": stage_id,
-            "mastery_score": progress["mastery_score"],
-            "passed": progress["passed"],
-            "unlock_next_stage": next_stage_unlocked,
-            "next_action": progress["next_action"],
-            "reason": progress["last_reason"],
-            "evidence": progress["evidence"],
-            "practice_result": practice_result,
-        }
-
-    def _recalculate_stage(
-        self,
-        stage: dict[str, Any],
-        user_id: str,
-        *,
-        increment_attempt: bool,
-    ) -> dict[str, Any] | None:
-        knowledge_ids = [str(item) for item in stage.get("knowledge_ids") or [] if str(item)]
-        metrics, evidence = self._stage_metrics(knowledge_ids, user_id)
-        score = (
-            metrics["recent_accuracy"] * 25
-            + metrics["difficulty_weight"] * 15
-            + metrics["variant_stability"] * 20
-            + metrics["wrong_reason_reduction"] * 15
-            + metrics["review_retention"] * 15
-            + metrics["process_quality"] * 10
-        )
-        threshold = float(stage.get("pass_threshold") or DEFAULT_PASS_THRESHOLD)
-        passed = score >= threshold
-        reason = self._reason(metrics, score, threshold)
-        next_action = self._next_action(metrics, passed)
-        progress = self.learning_store.update_stage_progress(
-            user_id=user_id,
-            stage_id=str(stage.get("stage_id") or stage.get("id")),
-            mastery_score=score,
-            passed=passed,
-            unlocked=bool((stage.get("progress") or {}).get("unlocked", True)),
-            reason=reason,
-            next_action=next_action,
-            evidence=evidence,
-            increment_attempt=increment_attempt,
-        )
-        return progress
-
-    def _select_knowledge_sequence(
-        self,
-        profile: dict[str, Any],
-        report: dict[str, Any] | None,
-        signals: dict[str, Any],
-    ) -> list[dict[str, Any]]:
-        ordered_ids: list[str] = []
-        if report:
-            ordered_ids.extend(str(item) for item in report.get("weak_knowledge_ids") or [] if str(item))
-        ordered_ids.extend(
-            str(item.get("knowledge_id"))
-            for item in signals.get("wrong_questions", [])
-            if item.get("knowledge_id")
-        )
-        ordered_ids.extend(
-            str(item.get("knowledge_id"))
-            for item in signals.get("mastery_records", [])
-            if item.get("knowledge_id") and float(item.get("mastery_score") or 0) < 75
-        )
-        sample = self._sample_knowledge(limit=12)
-        ordered_ids.extend(str(item.get("knowledge_id")) for item in sample if item.get("knowledge_id"))
-        unique_ids: list[str] = []
-        for knowledge_id in ordered_ids:
-            if knowledge_id and knowledge_id not in unique_ids:
-                unique_ids.append(knowledge_id)
-        selected: list[dict[str, Any]] = []
-        for knowledge_id in unique_ids[:8]:
-            selected.append(self._knowledge_brief(knowledge_id))
-            if len(selected) >= 3:
-                break
-        while len(selected) < 3 and sample:
-            candidate = self._knowledge_brief(str(sample[len(selected) % len(sample)].get("knowledge_id") or ""))
-            if candidate["knowledge_id"] not in {item["knowledge_id"] for item in selected}:
-                selected.append(candidate)
-            else:
-                break
-        if not selected:
-            selected = [
-                {"knowledge_id": "diagnostic", "knowledge_name": "Diagnostic foundation", "full_path": "Diagnostic foundation"}
-            ]
-        return selected
-
-    def _sample_knowledge(self, limit: int) -> list[dict[str, Any]]:
+def render_practice_pdf(payload: dict[str, Any]) -> bytes:
+    """Render a practice PDF with XeLaTeX and return the PDF bytes."""
+    xelatex = _resolve_xelatex()
+    _prepare_latex_for_render(xelatex)
+    tex_source = build_practice_tex(payload)
+    with tempfile.TemporaryDirectory(prefix="kaoyan_pdf_") as tmp:
+        tmp_path = Path(tmp)
+        tex_path = tmp_path / "practice.tex"
+        pdf_path = tmp_path / "practice.pdf"
+        tex_path.write_text(tex_source, encoding="utf-8")
         try:
-            return self.content_store.sample_knowledge_for_plan(limit=limit)
-        except Exception:
-            try:
-                return self.content_store.list_knowledge_points()[:limit]
-            except Exception:
-                return []
+            completed = subprocess.run(
+                _build_xelatex_command(xelatex, tex_path.name),
+                cwd=tmp_path,
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=_latex_render_timeout(),
+                check=False,
+            )
+        except subprocess.TimeoutExpired as exc:
+            raise PdfRenderError(
+                "XeLaTeX PDF generation timed out. MiKTeX may still be downloading packages; "
+                "try again after package installation finishes or increase KAOYAN_LATEX_TIMEOUT."
+            ) from exc
+        except OSError as exc:
+            raise PdfRenderError(f"Unable to run XeLaTeX: {exc}") from exc
+        if completed.returncode != 0 or not pdf_path.exists():
+            log_path = tmp_path / "practice.log"
+            log_text = log_path.read_text(encoding="utf-8", errors="replace") if log_path.exists() else completed.stderr
+            raise PdfRenderError("XeLaTeX PDF generation failed: " + _summarize_log(log_text))
+        return pdf_path.read_bytes()
 
-    def _knowledge_brief(self, knowledge_id: str) -> dict[str, Any]:
+
+def ensure_latex_packages() -> dict[str, Any]:
+    """Install the LaTeX packages needed by Kaoyan PDFs when MiKTeX is available."""
+    xelatex = _resolve_xelatex()
+    packages = _configured_latex_packages()
+    result: dict[str, Any] = {
+        "xelatex": xelatex,
+        "auto_install": _latex_auto_install_enabled(),
+        "packages": packages,
+        "installed": [],
+        "failed": [],
+        "skipped": [],
+    }
+    if not result["auto_install"]:
+        result["skipped"].append("KAOYAN_LATEX_AUTO_INSTALL is disabled")
+        return result
+    if not _is_miktex_xelatex(xelatex):
+        result["skipped"].append("Automatic package installation is only supported for MiKTeX")
+        return result
+    mpm = _resolve_mpm(xelatex)
+    if not mpm:
+        result["skipped"].append("MiKTeX package manager (mpm) was not found")
+        return result
+    result["mpm"] = mpm
+    for package in packages:
         try:
-            detail = self.content_store.get_knowledge(knowledge_id, question_limit=1)
-        except Exception:
-            detail = None
-        if detail and detail.get("knowledge"):
-            knowledge = detail["knowledge"]
-            return {
-                "knowledge_id": str(knowledge.get("knowledge_id") or knowledge_id),
-                "knowledge_name": str(knowledge.get("knowledge_name") or knowledge_id),
-                "full_path": str(knowledge.get("full_path") or knowledge.get("section") or knowledge.get("chapter") or ""),
-            }
-        return {"knowledge_id": knowledge_id, "knowledge_name": knowledge_id, "full_path": knowledge_id}
-
-    def _stage_metrics(self, knowledge_ids: list[str], user_id: str) -> tuple[dict[str, float], list[dict[str, Any]]]:
-        signals = self.learning_store.collect_learning_path_signals(user_id, knowledge_ids=knowledge_ids)
-        answers = signals["answers"]
-        wrongs = [item for item in signals["wrong_questions"] if item.get("review_status") != "mastered"]
-        reviews = signals["reviews"]
-        mastery = signals["mastery_records"]
-
-        recent_accuracy = self._ratio(sum(1 for item in answers[:10] if item.get("is_correct")), min(len(answers), 10), 0.6)
-        correct_difficulties = [float(item.get("difficulty_level") or 3.5) for item in answers if item.get("is_correct")]
-        difficulty_weight = min(1.0, (sum(correct_difficulties) / len(correct_difficulties)) / 5) if correct_difficulties else 0.6
-        unique_correct = {str(item.get("question_id")) for item in answers if item.get("is_correct")}
-        variant_stability = self._ratio(len(unique_correct), max(3, len({str(item.get("question_id")) for item in answers})), 0.6)
-        wrong_reason_reduction = max(0.25, 0.85 - min(0.6, len(wrongs) * 0.12))
-        if reviews:
-            mastered_reviews = sum(1 for item in reviews if item.get("status") == "mastered")
-            failed_reviews = sum(1 for item in reviews if item.get("status") == "failed")
-            review_retention = max(0.25, min(1.0, 0.55 + mastered_reviews * 0.18 - failed_reviews * 0.22))
+            completed = subprocess.run(
+                [mpm, f"--install={package}"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                timeout=_latex_install_timeout(),
+                check=False,
+            )
+        except (OSError, subprocess.TimeoutExpired) as exc:
+            result["failed"].append({"package": package, "error": str(exc)})
+            continue
+        if completed.returncode == 0:
+            result["installed"].append(package)
         else:
-            review_retention = 0.85 if len(answers) >= 8 and recent_accuracy >= 0.9 else 0.6
-        process_quality = recent_accuracy
-        if mastery:
-            mastery_score = sum(float(item.get("mastery_score") or 0) for item in mastery) / len(mastery) / 100
-            recent_accuracy = (recent_accuracy + mastery_score) / 2
-        metrics = {
-            "recent_accuracy": recent_accuracy,
-            "difficulty_weight": difficulty_weight,
-            "variant_stability": variant_stability,
-            "wrong_reason_reduction": wrong_reason_reduction,
-            "review_retention": review_retention,
-            "process_quality": process_quality,
-        }
-        evidence = [
-            {"type": "answer_record", "count": len(answers), "knowledge_ids": knowledge_ids},
-            {"type": "wrong_question", "count": len(wrongs), "top_reasons": self._top_reasons(wrongs)},
-            {"type": "review_queue", "count": len(reviews), "failed": sum(1 for item in reviews if item.get("status") == "failed")},
-            {"type": "mastery_record", "count": len(mastery)},
-        ]
-        return metrics, evidence
+            result["failed"].append({"package": package, "error": _summarize_process(completed)})
+    return result
 
-    def _reason(self, metrics: dict[str, float], score: float, threshold: float) -> dict[str, Any]:
-        blockers: list[str] = []
-        blocker_labels = {
-            "recent_accuracy_low": "???????",
-            "variant_stability_low": "????????",
-            "wrong_reason_still_active": "????????",
-            "review_retention_low": "???????",
-        }
-        if metrics["recent_accuracy"] < 0.8:
-            blockers.append("recent_accuracy_low")
-        if metrics["variant_stability"] < 0.8:
-            blockers.append("variant_stability_low")
-        if metrics["wrong_reason_reduction"] < 0.75:
-            blockers.append("wrong_reason_still_active")
-        if metrics["review_retention"] < 0.75:
-            blockers.append("review_retention_low")
-        if score >= threshold:
-            summary = "???????,????????"
-        elif blockers:
-            summary = "????????:" + "?".join(blocker_labels.get(item, item) for item in blockers)
-        else:
-            summary = "????????:?????????,???????????????"
-        return {
-            "summary": summary,
-            "blockers": blockers,
-            "metrics": {key: round(value, 3) for key, value in metrics.items()},
-            "threshold": threshold,
-        }
 
-    def _localize_reason_summary(self, reason: dict[str, Any]) -> dict[str, Any]:
-        if not isinstance(reason, dict):
-            return reason
-        summary = str(reason.get("summary") or "")
-        blocker_labels = {
-            "recent_accuracy_low": "???????",
-            "variant_stability_low": "????????",
-            "wrong_reason_still_active": "????????",
-            "review_retention_low": "???????",
-        }
-        if summary == "Mastery gate passed. Next stage is unlocked.":
-            reason["summary"] = "???????,????????"
-        elif summary == "Mastery gate not passed: complete more stage practice for stronger evidence.":
-            reason["summary"] = "????????:?????????,???????????????"
-        elif summary.startswith("Mastery gate not passed: "):
-            raw_blockers = summary.replace("Mastery gate not passed: ", "").split(",")
-            labels = [blocker_labels.get(item.strip(), item.strip()) for item in raw_blockers if item.strip()]
-            reason["summary"] = "????????:" + "?".join(labels)
-        return reason
+@lru_cache(maxsize=4)
+def _prepare_latex_for_render(xelatex: str) -> None:
+    if _latex_auto_install_enabled():
+        ensure_latex_packages()
 
-    def _next_action(self, metrics: dict[str, float], passed: bool) -> str:
-        if passed:
-            return "unlock_next_stage"
-        if metrics["recent_accuracy"] < 0.8:
-            return "foundation_practice"
-        if metrics["variant_stability"] < 0.8:
-            return "variant_practice"
-        if metrics["review_retention"] < 0.75:
-            return "review_foundation"
-        return "complete_more_stage_questions"
 
-    def _portrait_summary(
-        self,
-        profile: dict[str, Any],
-        report: dict[str, Any] | None,
-        signals: dict[str, Any],
-    ) -> dict[str, Any]:
-        weak_tags = list(profile.get("weak_modules") or [])
-        if report:
-            weak_tags.extend(str(item) for item in report.get("weak_knowledge_ids") or [])
-        return {
-            "baseline_level": profile.get("baseline_level") or "unknown",
-            "daily_minutes": profile.get("daily_minutes") or 120,
-            "weakness_tags": list(dict.fromkeys(str(item) for item in weak_tags if str(item)))[:8],
-            "wrong_question_count": len(signals.get("wrong_questions") or []),
-            "low_mastery_count": sum(
-                1 for item in signals.get("mastery_records") or [] if float(item.get("mastery_score") or 0) < 75
-            ),
-        }
+def _build_xelatex_command(xelatex: str, tex_name: str) -> list[str]:
+    command = [xelatex]
+    if _latex_auto_install_enabled() and _is_miktex_xelatex(xelatex):
+        command.append("--enable-installer")
+    command.extend(["-interaction=nonstopmode", "-halt-on-error", tex_name])
+    return command
 
-    def _path_evidence(self, report: dict[str, Any] | None, signals: dict[str, Any]) -> list[dict[str, Any]]:
-        evidence = [
-            {"type": "diagnostic_report", "id": (report or {}).get("report_id"), "confirmed": bool(report)},
-            {"type": "wrong_questions", "count": len(signals.get("wrong_questions") or [])},
-            {"type": "mastery_records", "count": len(signals.get("mastery_records") or [])},
-            {"type": "review_queue", "count": len(signals.get("reviews") or [])},
-        ]
-        return evidence
 
-    def _stage_context(
-        self,
-        item: dict[str, Any],
-        profile: dict[str, Any],
-        report: dict[str, Any] | None,
-        signals: dict[str, Any],
-    ) -> dict[str, Any]:
-        return {
-            "knowledge_id": item["knowledge_id"],
-            "knowledge_name": item["knowledge_name"],
-            "full_path": item.get("full_path", ""),
-            "diagnostic_report_id": (report or {}).get("report_id"),
-            "target_score": profile.get("target_score"),
-            "recent_wrong_count": sum(
-                1 for wrong in signals.get("wrong_questions", []) if wrong.get("knowledge_id") == item["knowledge_id"]
-            ),
-        }
+def _configured_latex_packages() -> list[str]:
+    configured = os.environ.get("KAOYAN_LATEX_PACKAGES")
+    if not configured:
+        return list(_DEFAULT_LATEX_PACKAGES)
+    return [item.strip() for item in configured.split(",") if item.strip()]
 
-    def _weakness_tags(
-        self,
-        knowledge_id: str,
-        report: dict[str, Any] | None,
-        signals: dict[str, Any],
-    ) -> list[str]:
-        tags = []
-        if report and knowledge_id in set(str(item) for item in report.get("weak_knowledge_ids") or []):
-            tags.append("diagnostic_weakness")
-        if any(item.get("knowledge_id") == knowledge_id for item in signals.get("wrong_questions", [])):
-            tags.append("wrong_question_hotspot")
-        if any(
-            item.get("knowledge_id") == knowledge_id and float(item.get("mastery_score") or 0) < 75
-            for item in signals.get("mastery_records", [])
-        ):
-            tags.append("low_mastery")
-        return tags or ["path_foundation"]
 
-    def _with_stage_summaries(self, path: dict[str, Any], user_id: str) -> dict[str, Any]:
-        stages = path.get("stages") or []
-        for stage in stages:
-            progress = stage.get("progress") or {}
-            if progress.get("last_reason"):
-                progress["last_reason"] = self._localize_reason_summary(progress["last_reason"])
-        path["current_stage"] = next(
-            (stage for stage in stages if (stage.get("progress") or {}).get("unlocked") and not (stage.get("progress") or {}).get("passed")),
-            stages[0] if stages else None,
+def _latex_auto_install_enabled() -> bool:
+    value = os.environ.get("KAOYAN_LATEX_AUTO_INSTALL")
+    if value is None:
+        return True
+    return value.strip().lower() not in {"0", "false", "no", "off"}
+
+
+def _latex_render_timeout() -> int:
+    return _positive_int_env("KAOYAN_LATEX_TIMEOUT", 180)
+
+
+def _latex_install_timeout() -> int:
+    return _positive_int_env("KAOYAN_LATEX_INSTALL_TIMEOUT", 300)
+
+
+def _positive_int_env(name: str, default: int) -> int:
+    try:
+        value = int(os.environ.get(name, ""))
+    except ValueError:
+        return default
+    return value if value > 0 else default
+
+
+@lru_cache(maxsize=8)
+def _is_miktex_xelatex(xelatex: str) -> bool:
+    try:
+        completed = subprocess.run(
+            [xelatex, "--version"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            timeout=10,
+            check=False,
         )
-        path["unlocked_stages"] = [stage for stage in stages if (stage.get("progress") or {}).get("unlocked")]
-        path["portrait_summary"] = path.get("portrait_summary") or {}
-        return path
+    except (OSError, subprocess.TimeoutExpired):
+        return False
+    output = f"{completed.stdout}\n{completed.stderr}"
+    return "MiKTeX" in output
 
-    def _stage_title(self, index: int, item: dict[str, Any]) -> str:
-        return f"Stage {index + 1}: {item.get('knowledge_name') or item.get('knowledge_id')}"
 
-    def _top_reasons(self, wrongs: list[dict[str, Any]]) -> list[str]:
-        counts = Counter(str(item.get("error_reason") or "unknown") for item in wrongs)
-        return [reason for reason, _count in counts.most_common(3)]
+def _resolve_mpm(xelatex: str) -> str | None:
+    found = shutil.which("mpm")
+    if found:
+        return found
+    xelatex_path = Path(xelatex)
+    candidates = [xelatex_path.with_name("mpm.exe"), xelatex_path.with_name("mpm")]
+    for candidate in candidates:
+        if candidate.exists():
+            return str(candidate)
+    return None
 
-    def _ratio(self, numerator: int, denominator: int, default: float) -> float:
-        if denominator <= 0:
-            return default
-        return max(0.0, min(1.0, numerator / denominator))
+
+def _summarize_process(completed: subprocess.CompletedProcess[str]) -> str:
+    text = "\n".join(part for part in [completed.stdout, completed.stderr] if part)
+    return _summarize_log(text) or f"exit code {completed.returncode}"
+
+
+def build_practice_tex(payload: dict[str, Any]) -> str:
+    title = _latex_escape(str(payload.get("title") or "\u8003\u7814\u7ebf\u4e0b\u7ec3\u4e60\u9898\u5355"))
+    label_total = "\u5171"
+    label_questions = "\u9898\u76ee"
+    label_answers = "\u53c2\u8003\u7b54\u6848\u4e0e\u89e3\u6790"
+    label_question_count = "\u9898"
+    label_difficulty = "\u96be\u5ea6"
+    label_analysis = "\u89e3\u6790"
+    no_questions = "\u6682\u65e0\u9898\u76ee"
+    no_answer = "\u6682\u65e0\u7b54\u6848"
+    questions = list(payload.get("questions") or [])
+    question_blocks = []
+    answer_blocks = []
+    for index, question in enumerate(questions, start=1):
+        qtype = _latex_escape(str(question.get("question_type") or ""))
+        difficulty = _latex_escape(str(question.get("difficulty_level") or ""))
+        stem = _markdown_to_tex(question.get("stem_without_options") or question.get("stem") or "")
+        answer = _markdown_to_tex(question.get("answer") or "\u6682\u65e0\u7b54\u6848")
+        analysis = _markdown_to_tex(question.get("analysis") or "")
+        question_blocks.append(
+            "\\item "
+            f"\\textbf{{[{qtype}] {label_difficulty} {difficulty}}}\\\\[4pt]\n"
+            f"{stem}\n"
+        )
+        answer_text = f"\\item {answer}"
+        if analysis:
+            answer_text += f"\\\\[4pt]\\textit{{{label_analysis}}}: {analysis}"
+        answer_blocks.append(answer_text)
+    questions_tex = "\n".join(question_blocks) or f"\\item {no_questions}"
+    answers_tex = "\n".join(answer_blocks) or f"\\item {no_answer}"
+    return f"""
+\\documentclass[UTF8,a4paper,12pt]{{ctexart}}
+\\usepackage{{geometry}}
+\\usepackage{{enumitem}}
+\\usepackage{{fontspec}}
+\\usepackage{{iftex}}
+\\usepackage{{amsmath}}
+\\usepackage{{amssymb}}
+\\usepackage{{mathtools}}
+\\usepackage{{unicode-math}}
+\\geometry{{left=2.2cm,right=2.2cm,top=2.2cm,bottom=2.2cm}}
+\\IfFontExistsTF{{Microsoft YaHei}}{{\\setCJKmainfont{{Microsoft YaHei}}}}{{\\IfFontExistsTF{{SimSun}}{{\\setCJKmainfont{{SimSun}}}}{{\\IfFontExistsTF{{Noto Serif CJK SC}}{{\\setCJKmainfont{{Noto Serif CJK SC}}}}{{\\IfFontExistsTF{{FandolSong}}{{\\setCJKmainfont{{FandolSong}}}}{{}}}}}}}}
+\\IfFontExistsTF{{Latin Modern Math}}{{\\setmathfont{{Latin Modern Math}}}}{{}}
+\\setlist[enumerate]{{leftmargin=*, itemsep=1.1em}}
+\\linespread{{1.18}}
+\\pagestyle{{plain}}
+\\begin{{document}}
+\\begin{{center}}
+  {{\\Large\\bfseries {title}}}\\\\[0.4em]
+  {{\\small {label_total} {len(questions)} {label_question_count}}}
+\\end{{center}}
+
+\\section*{{{label_questions}}}
+\\begin{{enumerate}}
+{questions_tex}
+\\end{{enumerate}}
+
+\\newpage
+\\section*{{{label_answers}}}
+\\begin{{enumerate}}
+{answers_tex}
+\\end{{enumerate}}
+\\end{{document}}
+""".strip()
+
+
+def _resolve_xelatex() -> str:
+    configured = os.environ.get("KAOYAN_XELATEX_PATH")
+    if configured:
+        path = Path(configured)
+        if path.exists():
+            return str(path)
+        raise PdfRenderError(f"KAOYAN_XELATEX_PATH does not exist: {configured}")
+    found = shutil.which("xelatex")
+    if not found:
+        raise PdfRenderError("XeLaTeX was not found. Install MiKTeX or set KAOYAN_XELATEX_PATH.")
+    return found
+
+
+def _plain_text(value: Any) -> str:
+    text = str(value or "").replace("\r\n", "\n").replace("\r", "\n")
+    text = re.sub(r"```.*?```", lambda match: match.group(0).strip("`"), text, flags=re.S)
+    text = re.sub(r"!\[[^\]]*\]\([^)]+\)", "", text)
+    text = re.sub(r"\[([^\]]+)\]\([^)]+\)", r"\1", text)
+    text = re.sub(r"(?m)^\s*>\s?", "", text)
+    text = re.sub(r"[*`#]+", "", text)
+    text = _INVALID_RE.sub("", text)
+    text = _CONTROL_RE.sub("", text)
+    return re.sub(r"\n{3,}", "\n\n", text).strip()
+
+
+def _markdown_to_tex(value: Any) -> str:
+    text = _plain_text(value)
+    if not text:
+        return ""
+    parts: list[str] = []
+    cursor = 0
+    for match in _MATH_RE.finditer(text):
+        if match.start() > cursor:
+            parts.append(_latex_escape_text(text[cursor : match.start()]))
+        parts.append(_normalize_math_segment(match.group(0)))
+        cursor = match.end()
+    if cursor < len(text):
+        parts.append(_latex_escape_text(text[cursor:]))
+    return "".join(parts)
+
+
+def _normalize_math_segment(segment: str) -> str:
+    if segment.startswith("$$") and segment.endswith("$$"):
+        body = segment[2:-2]
+        return "\\[\n" + _normalize_math_body(body) + "\n\\]"
+    if segment.startswith("\\[") and segment.endswith("\\]"):
+        body = segment[2:-2]
+        return "\\[\n" + _normalize_math_body(body) + "\n\\]"
+    if segment.startswith("\\(") and segment.endswith("\\)"):
+        body = segment[2:-2]
+        return r"\(" + _normalize_math_body(body) + r"\)"
+    if segment.startswith("$") and segment.endswith("$"):
+        body = segment[1:-1]
+        return "$" + _normalize_math_body(body) + "$"
+    return _latex_escape_text(segment)
+
+
+def _normalize_math_body(value: str) -> str:
+    text = _INVALID_RE.sub("", _CONTROL_RE.sub("", str(value or "")))
+    text = _normalize_blanks(text)
+    for raw, replacement in _MATH_SYMBOLS.items():
+        text = text.replace(raw, replacement)
+    return text.strip()
+
+
+def _latex_escape_text(value: str) -> str:
+    value = _normalize_blanks(str(value or ""))
+    parts: list[str] = []
+    buffer: list[str] = []
+    cursor = 0
+    for match in re.finditer(re.escape(_BLANK_TEX), value):
+        if match.start() > cursor:
+            parts.append(_latex_escape_text_chunk(value[cursor : match.start()]))
+        parts.append(_BLANK_TEX)
+        cursor = match.end()
+    if cursor < len(value):
+        parts.append(_latex_escape_text_chunk(value[cursor:]))
+    return "".join(parts)
+
+
+def _latex_escape_text_chunk(value: str) -> str:
+    parts: list[str] = []
+    buffer: list[str] = []
+    for char in str(value or ""):
+        replacement = _TEXT_MATH_SYMBOLS.get(char)
+        if replacement:
+            if buffer:
+                parts.append(_latex_escape("".join(buffer)))
+                buffer = []
+            parts.append(replacement)
+        else:
+            buffer.append(char)
+    if buffer:
+        parts.append(_latex_escape("".join(buffer)))
+    return "".join(parts)
+
+
+def _normalize_blanks(value: str) -> str:
+    return _BLANK_RE.sub(lambda _match: _BLANK_TEX, str(value or ""))
+
+
+def _latex_escape(value: str) -> str:
+    replacements = {
+        "\\": r"\textbackslash{}",
+        "&": r"\&",
+        "%": r"\%",
+        "$": r"\$",
+        "#": r"\#",
+        "_": r"\_",
+        "{": r"\{",
+        "}": r"\}",
+        "~": r"\textasciitilde{}",
+        "^": r"\textasciicircum{}",
+    }
+    escaped = "".join(replacements.get(char, char) for char in value)
+    return escaped.replace("\n", r"\\ " + "\n")
+
+
+def _summarize_log(log_text: str) -> str:
+    lines = [line.strip() for line in str(log_text or "").splitlines() if line.strip()]
+    important = [line for line in lines if line.startswith("!") or "Error" in line or "not found" in line]
+    selected = important[:6] or lines[-6:]
+    return " ".join(selected)[:1200] or "unknown LaTeX error"

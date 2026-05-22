@@ -1,5 +1,5 @@
 """
-TutorBot Manager - spawn / stop / manage in-process TutorBot instances.
+TutorBot Manager — spawn / stop / manage in-process TutorBot instances.
 
 Each TutorBot instance runs as a set of asyncio tasks within the Master Prep AI
 server process.  Every bot gets its own isolated workspace under
@@ -74,7 +74,7 @@ def mask_channel_secrets(channels: dict[str, Any]) -> dict[str, Any]:
         return value
 
     walked = _walk(channels)
-    if not isinstance(walked, dict):  # defensive - should not happen
+    if not isinstance(walked, dict):  # defensive — should not happen
         return {}
     return walked
 
@@ -123,10 +123,10 @@ class TutorBotInstance:
 
         Channel field shape:
         - default (``include_secrets=False, mask_secrets=False``): list of channel
-          names - safe for list / index endpoints.
+          names — safe for list / index endpoints.
         - ``mask_secrets=True``: full nested dict, but secret-looking strings
-          replaced with ``***`` - safe for read-only detail views.
-        - ``include_secrets=True``: full nested dict including raw secrets -
+          replaced with ``***`` — safe for read-only detail views.
+        - ``include_secrets=True``: full nested dict including raw secrets —
           ONLY use for the admin edit form (and only on the explicitly-opt-in
           single-bot GET).
         """
@@ -157,7 +157,7 @@ class TutorBotManager:
         self._bots: dict[str, TutorBotInstance] = {}
         self._path_service = get_path_service()
 
-    # ?? Path helpers ??????????????????????????????????????????????
+    # ── Path helpers ──────────────────────────────────────────────
 
     @property
     def _tutorbot_dir(self) -> Path:
@@ -174,7 +174,7 @@ class TutorBotManager:
     def _bot_workspace(self, bot_id: str) -> Path:
         return self._bot_dir(bot_id) / "workspace"
 
-    # ?? Per-bot directory setup ???????????????????????????????????
+    # ── Per-bot directory setup ───────────────────────────────────
 
     def _ensure_bot_dirs(self, bot_id: str) -> None:
         """Create the per-bot directory tree and seed skills/templates."""
@@ -222,7 +222,7 @@ class TutorBotManager:
             if src.exists() and not dst.exists():
                 shutil.copy2(src, dst)
 
-    # ?? Legacy data migration ?????????????????????????????????????
+    # ── Legacy data migration ─────────────────────────────────────
 
     def _maybe_migrate_legacy(self, bot_id: str) -> None:
         """Migrate from the old bots/ sub-directory layout.
@@ -263,7 +263,7 @@ class TutorBotManager:
             shutil.move(str(legacy_yaml), str(new_config))
             logger.info("Migrated bot config %s.yaml", bot_id)
 
-    # ?? Config persistence ????????????????????????????????????????
+    # ── Config persistence ────────────────────────────────────────
 
     # Field names from BotConfig that are persisted via merge.
     _MERGEABLE_FIELDS = ("name", "description", "persona", "channels", "model")
@@ -327,7 +327,7 @@ class TutorBotManager:
         Keys in ``overrides`` whose value is ``None`` are treated as "not provided"
         and fall through to the existing on-disk value (or to the dataclass default
         for a brand-new bot). Empty strings / empty dicts are intentional clears
-        and DO override - callers must use ``None`` to mean "leave as-is".
+        and DO override — callers must use ``None`` to mean "leave as-is".
 
         Unknown keys are silently ignored.
         """
@@ -338,7 +338,7 @@ class TutorBotManager:
                 setattr(base, key, overrides[key])
         return base
 
-    # ?? Bot lifecycle ?????????????????????????????????????????????
+    # ── Bot lifecycle ─────────────────────────────────────────────
 
     async def start_bot(self, bot_id: str, config: BotConfig | None = None) -> TutorBotInstance:
         """Start a TutorBot instance with its own isolated workspace."""
@@ -636,8 +636,8 @@ class TutorBotManager:
     ) -> None:
         """Cancel ``tutorbot:{bot_id}:ch:*`` tasks and stop the existing manager.
 
-        Note: ``channel_bindings`` are intentionally cleared - they map
-        channel?last-seen chat_id and will be rebuilt as the rebooted listeners
+        Note: ``channel_bindings`` are intentionally cleared — they map
+        channel→last-seen chat_id and will be rebuilt as the rebooted listeners
         receive new traffic. Pending heartbeat replies bound to a stale chat_id
         will be dropped (acceptable: same behaviour as Stop/Start).
         """
@@ -662,7 +662,7 @@ class TutorBotManager:
         instance.channel_manager = None
         instance.channel_bindings.clear()
 
-    # ?? Listing & discovery ???????????????????????????????????????
+    # ── Listing & discovery ───────────────────────────────────────
 
     def _discover_bot_ids(self) -> set[str]:
         """Return all bot IDs found on disk."""
@@ -680,7 +680,7 @@ class TutorBotManager:
     def list_bots(self) -> list[dict[str, Any]]:
         """List all known bots (running + configured on disk).
 
-        Channel field is keys-only - never expose secrets via the list endpoint.
+        Channel field is keys-only — never expose secrets via the list endpoint.
         """
         result: dict[str, dict[str, Any]] = {}
 
@@ -876,7 +876,7 @@ class TutorBotManager:
         logger.info("TutorBot '%s' destroyed (data deleted)", bot_id)
         return True
 
-    # ?? Workspace file helpers ????????????????????????????????????
+    # ── Workspace file helpers ────────────────────────────────────
 
     _EDITABLE_FILES = {"SOUL.md", "USER.md", "TOOLS.md", "AGENTS.md", "HEARTBEAT.md"}
 
@@ -909,7 +909,7 @@ class TutorBotManager:
         for bot_id in list(self._bots.keys()):
             await self.stop_bot(bot_id, preserve_auto_start=preserve_auto_start)
 
-    # ?? Soul template library ?????????????????????????????????????
+    # ── Soul template library ─────────────────────────────────────
 
     @property
     def _souls_file(self) -> Path:
@@ -961,7 +961,7 @@ class TutorBotManager:
                 "content": (
                     "# Soul\n\nI am a coding assistant focused on helping developers write better software.\n\n"
                     "## Personality\n\n- Precise and detail-oriented\n"
-                    "- Pragmatic - working code over perfect code\n- Explains trade-offs clearly\n\n"
+                    "- Pragmatic — working code over perfect code\n- Explains trade-offs clearly\n\n"
                     "## Approach\n\n- Read before writing; understand context first\n"
                     "- Suggest tests alongside implementations\n- Prefer standard patterns over clever tricks"
                 ),
@@ -972,7 +972,7 @@ class TutorBotManager:
                 "content": (
                     "# Soul\n\nI am a research assistant helping users explore academic topics in depth.\n\n"
                     "## Personality\n\n- Curious and thorough\n"
-                    "- Balanced - presents multiple perspectives\n- Cites sources when possible\n\n"
+                    "- Balanced — presents multiple perspectives\n- Cites sources when possible\n\n"
                     "## Approach\n\n- Decompose broad questions into focused sub-questions\n"
                     "- Distinguish established facts from open questions\n- Suggest further reading"
                 ),
