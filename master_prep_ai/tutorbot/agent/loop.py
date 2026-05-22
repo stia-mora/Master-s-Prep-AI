@@ -29,7 +29,11 @@ from master_prep_ai.tutorbot.providers.base import LLMProvider
 from master_prep_ai.tutorbot.session.manager import Session, SessionManager
 
 if TYPE_CHECKING:
-    from master_prep_ai.tutorbot.config.schema import ChannelsConfig, ExecToolConfig, WebSearchConfig
+    from master_prep_ai.tutorbot.config.schema import (
+        ChannelsConfig,
+        ExecToolConfig,
+        WebSearchConfig,
+    )
     from master_prep_ai.tutorbot.cron.service import CronService
 
 
@@ -198,7 +202,7 @@ class AgentLoop:
 
     @staticmethod
     def _strip_think(text: str | None) -> str | None:
-        """Remove <think>…</think> blocks that some models embed in content."""
+        """Remove <think>.</think> blocks that some models embed in content."""
         if not text:
             return None
         return re.sub(r"<think>[\s\S]*?</think>", "", text).strip() or None
@@ -212,7 +216,7 @@ class AgentLoop:
             val = next(iter(args.values()), None) if isinstance(args, dict) else None
             if not isinstance(val, str):
                 return tc.name
-            return f'{tc.name}("{val[:40]}…")' if len(val) > 40 else f'{tc.name}("{val}")'
+            return f'{tc.name}("{val[:40]}.")' if len(val) > 40 else f'{tc.name}("{val}")'
 
         return ", ".join(_fmt(tc) for tc in tool_calls)
 
@@ -264,7 +268,7 @@ class AgentLoop:
                     )
             else:
                 clean = self._strip_think(response.content)
-                # Don't persist error responses to session history — they can
+                # Don't persist error responses to session history - they can
                 # poison the context and cause permanent 400 loops (#1303).
                 if response.finish_reason == "error":
                     logger.error("LLM returned error: {}", (clean or "")[:200])
@@ -475,19 +479,19 @@ class AgentLoop:
             )
         if cmd == "/help":
             lines = [
-                "🐈 TutorBot commands:",
-                "/new — Start a new conversation",
-                "/stop — Stop the current task",
-                "/restart — Restart the bot",
-                "/team <goal> — Start or instruct nano team mode",
-                "/team status — Show nano team state",
-                "/team log [n] — Show detailed collaboration logs (default 20)",
-                "/team approve <task_id> — Approve a pending task",
-                "/team reject <task_id> <reason> — Reject a pending task",
-                "/team manual <task_id> <instruction> — Send change request",
-                "/team stop — Stop nano team mode",
-                "/btw <instruction> — Async side task via single subagent",
-                "/help — Show available commands",
+                "?? TutorBot commands:",
+                "/new - Start a new conversation",
+                "/stop - Stop the current task",
+                "/restart - Restart the bot",
+                "/team <goal> - Start or instruct nano team mode",
+                "/team status - Show nano team state",
+                "/team log [n] - Show detailed collaboration logs (default 20)",
+                "/team approve <task_id> - Approve a pending task",
+                "/team reject <task_id> <reason> - Reject a pending task",
+                "/team manual <task_id> <instruction> - Send change request",
+                "/team stop - Stop nano team mode",
+                "/btw <instruction> - Async side task via single subagent",
+                "/help - Show available commands",
             ]
             return OutboundMessage(
                 channel=msg.channel,
@@ -712,7 +716,7 @@ class AgentLoop:
             entry = dict(m)
             role, content = entry.get("role"), entry.get("content")
             if role == "assistant" and not content and not entry.get("tool_calls"):
-                continue  # skip empty assistant messages — they poison session context
+                continue  # skip empty assistant messages - they poison session context
             if (
                 role == "tool"
                 and isinstance(content, str)

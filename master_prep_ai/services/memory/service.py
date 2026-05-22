@@ -19,7 +19,10 @@ from typing import Literal
 
 from master_prep_ai.services.llm import stream as llm_stream
 from master_prep_ai.services.path_service import PathService, get_path_service
-from master_prep_ai.services.session.sqlite_store import SQLiteSessionStore, get_sqlite_session_store
+from master_prep_ai.services.session.sqlite_store import (
+    SQLiteSessionStore,
+    get_sqlite_session_store,
+)
 
 MemoryFile = Literal["summary", "profile"]
 MEMORY_FILES: list[MemoryFile] = ["summary", "profile"]
@@ -94,7 +97,7 @@ class MemoryService:
             )
         legacy.rename(legacy.with_suffix(".md.bak"))
 
-    # ── Read ──────────────────────────────────────────────────────────
+    # ?? Read ??????????????????????????????????????????????????????????
 
     def read_file(self, which: MemoryFile) -> str:
         path = self._path(which)
@@ -128,7 +131,7 @@ class MemoryService:
             profile_updated_at=self._file_updated_at("profile"),
         )
 
-    # ── Write ─────────────────────────────────────────────────────────
+    # ?? Write ?????????????????????????????????????????????????????????
 
     def write_file(self, which: MemoryFile, content: str) -> MemorySnapshot:
         normalized = str(content or "").strip()
@@ -155,7 +158,7 @@ class MemoryService:
                 path.unlink()
         return self.read_snapshot()
 
-    # ── Context building (injected into LLM prompts) ─────────────────
+    # ?? Context building (injected into LLM prompts) ?????????????????
 
     def build_memory_context(self, max_chars: int = 4000) -> str:
         parts: list[str] = []
@@ -177,7 +180,7 @@ class MemoryService:
 
         return (
             "## Background Memory\n"
-            "Use this memory sparingly — only when directly relevant.\n\n"
+            "Use this memory sparingly - only when directly relevant.\n\n"
             f"{combined}"
         )
 
@@ -185,7 +188,7 @@ class MemoryService:
         profile = self.read_profile()
         return f"## User Profile\n{profile}" if profile else ""
 
-    # ── Auto-refresh from conversation ────────────────────────────────
+    # ?? Auto-refresh from conversation ????????????????????????????????
 
     async def refresh_from_turn(
         self,
@@ -272,7 +275,7 @@ class MemoryService:
             updated_at=snap.profile_updated_at,
         )
 
-    # ── LLM rewrite for individual files ──────────────────────────────
+    # ?? LLM rewrite for individual files ??????????????????????????????
 
     async def _rewrite_one(self, which: MemoryFile, source: str, language: str) -> bool:
         """Rewrite a single memory file. Returns True if changed."""
@@ -307,13 +310,13 @@ class MemoryService:
     def _profile_prompts(current: str, source: str, zh: bool) -> tuple[str, str]:
         if zh:
             return (
-                "你负责维护一份用户画像文档。只保留稳定的用户身份、偏好、知识水平。"
-                f"如果无需修改，请只返回 {_NO_CHANGE}。",
-                "如果需要更新，请重写用户画像，可使用以下标题：\n"
+                "?????????????????????????????????"
+                f"??????,???? {_NO_CHANGE}?",
+                "??????,???????,???????:\n"
                 "## Identity\n## Learning Style\n## Knowledge Level\n## Preferences\n\n"
-                "规则：保持简短，删除过时内容，不要记录临时对话。\n\n"
-                f"[当前画像]\n{current or '(empty)'}\n\n"
-                f"[新增材料]\n{source}",
+                "??:????,??????,?????????\n\n"
+                f"[????]\n{current or '(empty)'}\n\n"
+                f"[????]\n{source}",
             )
         return (
             "You maintain a user profile document. Only keep stable identity, "
@@ -330,13 +333,13 @@ class MemoryService:
     def _summary_prompts(current: str, source: str, zh: bool) -> tuple[str, str]:
         if zh:
             return (
-                "你负责维护一份学习旅程摘要。记录用户正在学什么、完成了什么、有哪些待解决的问题。"
-                f"如果无需修改，请只返回 {_NO_CHANGE}。",
-                "如果需要更新，请重写学习旅程摘要，可使用以下标题：\n"
+                "????????????????????????????????????????"
+                f"??????,???? {_NO_CHANGE}?",
+                "??????,?????????,???????:\n"
                 "## Current Focus\n## Accomplishments\n## Open Questions\n\n"
-                "规则：保持简短，删除已完成或过时的条目。\n\n"
-                f"[当前摘要]\n{current or '(empty)'}\n\n"
-                f"[新增材料]\n{source}",
+                "??:????,????????????\n\n"
+                f"[????]\n{current or '(empty)'}\n\n"
+                f"[????]\n{source}",
             )
         return (
             "You maintain a learning journey summary. Track what the user is studying, "
@@ -349,7 +352,7 @@ class MemoryService:
             f"[New material]\n{source}",
         )
 
-    # ── Helpers ───────────────────────────────────────────────────────
+    # ?? Helpers ???????????????????????????????????????????????????????
 
     @staticmethod
     def _extract_legacy_sections(content: str) -> tuple[str, str]:

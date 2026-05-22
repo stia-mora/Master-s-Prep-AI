@@ -8,8 +8,8 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-import uuid
 from typing import Any
+import uuid
 
 DEFAULT_USER_ID = "local-user"
 _MATERIAL_PARSE_TASKS: dict[str, dict[str, Any]] = {}
@@ -20,13 +20,13 @@ _REFERENCE_PATTERNS = [
     re.compile(r"#references\s+[\"'][^\"']+[\"']", re.IGNORECASE),
 ]
 _QUESTION_LIKE_MARKERS = (
-    "下列",
-    "求极限",
-    "证明",
-    "不可导点",
-    "个数为",
-    "填空",
-    "选择",
+    "??",
+    "???",
+    "??",
+    "????",
+    "???",
+    "??",
+    "??",
     "______",
     "\\_\\_",
 )
@@ -72,7 +72,7 @@ def _clean_rows(rows: list[sqlite3.Row]) -> list[dict[str, Any]]:
     return [_row_to_dict(row) for row in rows]
 
 _CHOICE_OPTION_RE = re.compile(
-    r"(?:^|\n)\s*[\(（]([A-D])\s*[\)）]\s*(.*?)(?=(?:\n\s*[\(（][A-D]\s*[\)）])|\Z)",
+    r"(?:^|\n)\s*[\((]([A-D])\s*[\))]\s*(.*?)(?=(?:\n\s*[\((][A-D]\s*[\))])|\Z)",
     re.DOTALL,
 )
 
@@ -99,7 +99,7 @@ def _question_row_to_dict(row: sqlite3.Row | dict[str, Any]) -> dict[str, Any]:
     data["stem"] = stem_main if options else stem
     data["stem_without_options"] = stem_main
     data["options"] = options
-    data["is_choice"] = bool(options) or "选择" in str(data.get("question_type") or "")
+    data["is_choice"] = bool(options) or "??" in str(data.get("question_type") or "")
     return data
 
 
@@ -295,10 +295,10 @@ class KaoyanContentStore:
             params.append(question_type)
         if question_family == "choice":
             clauses.append("question_type LIKE ?")
-            params.append("%选择%")
+            params.append("%??%")
         elif question_family == "free_response":
             clauses.append("question_type NOT LIKE ?")
-            params.append("%选择%")
+            params.append("%??%")
         if difficulty_level:
             clauses.append("difficulty_level BETWEEN ? AND ?")
             params.extend([max(1, difficulty_level - 1), min(5, difficulty_level + 1)])
