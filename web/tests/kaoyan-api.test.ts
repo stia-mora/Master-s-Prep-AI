@@ -145,3 +145,35 @@ test("dashboard summary returns compatible optional member A fields", async () =
   assert.equal(summary.today_tasks?.[0]?.task_id, "task_1");
   assert.deepEqual(summary.weak_knowledge_ids, ["K_LIMIT"]);
 });
+
+test("wrong question agent B helpers use the expected endpoints", async () => {
+  const api = await loadKaoyanApi();
+  mockFetch([]);
+
+  await api.getWrongQuestions({ status: "focus", sort: "wrong_count", question_type: "选择题" });
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/wrong-questions?status=focus&sort=wrong_count&question_type=%E9%80%89%E6%8B%A9%E9%A2%98");
+
+  mockFetch({ total: 1, unmastered: 1, focus_count: 0, pending_retry: 1, by_knowledge: [], by_question_type: [], by_wrong_reason: [], wrong_count_top10: [], repeated_wrong_questions: [] });
+  await api.getWrongQuestionSummary();
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/wrong-questions/summary");
+
+  mockFetch({ session_id: "prac_retry", questions: [] });
+  await api.retryWrongQuestion("wrong_1", { retry_mode: "variant", limit: 1 });
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/wrong-questions/wrong_1/retry");
+  assert.equal(fetchCalls[0].init?.method, "POST");
+  assert.equal(fetchCalls[0].init?.body, JSON.stringify({ retry_mode: "variant", limit: 1 }));
+
+  mockFetch({ session_id: "prac_batch", questions: [] });
+  await api.batchRetryWrongQuestions({ wrong_ids: ["wrong_1"], retry_mode: "mixed", limit: 2 });
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/wrong-questions/batch-retry");
+  assert.equal(fetchCalls[0].init?.body, JSON.stringify({ wrong_ids: ["wrong_1"], retry_mode: "mixed", limit: 2 }));
+
+  mockFetch({ action: "mark_focus", affected_count: 1, items: [] });
+  await api.batchActionWrongQuestions({ wrong_ids: ["wrong_1"], action: "mark_focus" });
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/wrong-questions/batch-action");
+  assert.equal(fetchCalls[0].init?.body, JSON.stringify({ wrong_ids: ["wrong_1"], action: "mark_focus" }));
+
+  mockFetch({ wrong_id: "wrong_1", wrong_reason: "公式误用" });
+  await api.updateWrongQuestionReason("wrong_1", { wrong_reason: "公式误用", reason_source: "manual" });
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/wrong-questions/wrong_1/reason");
+});

@@ -95,6 +95,28 @@ class ReviewSubmitRequest(BaseModel):
     status: Literal["reviewed", "mastered", "failed"]
 
 
+class WrongQuestionRetryRequest(BaseModel):
+    retry_mode: Literal["original", "variant"] = "original"
+    limit: int = Field(default=1, ge=1, le=20)
+
+
+class WrongQuestionBatchRetryRequest(BaseModel):
+    wrong_ids: list[str] = Field(default_factory=list)
+    retry_mode: Literal["original", "variant", "mixed"] = "original"
+    limit: int = Field(default=20, ge=1, le=50)
+
+
+class WrongQuestionBatchActionRequest(BaseModel):
+    wrong_ids: list[str] = Field(default_factory=list)
+    action: Literal["mark_focus", "unmark_focus", "set_reason", "add_to_review", "export_selected"]
+    wrong_reason: str = ""
+
+
+class WrongQuestionReasonRequest(BaseModel):
+    wrong_reason: str = Field(default="", min_length=1, max_length=120)
+    reason_source: Literal["manual", "ai"] = "manual"
+
+
 class ChatContextRequest(BaseModel):
     source_type: Literal["knowledge", "question"]
     source_id: str
@@ -138,6 +160,109 @@ def _content():
 
 def _learning():
     return get_learning_store()
+
+
+def _enrich_wrong_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    question_rows = _content().get_questions([row["question_id"] for row in rows])
+    questions = {item["question_id"]: item for item in question_rows}
+    enriched = []
+    for row in rows:
+        item = dict(row)
+        item["question"] = questions.get(row["question_id"])
+        if not item.get("question_type") and item["question"]:
+            item["question_type"] = item["question"].get("question_type", "")
+        item["wrong_reason"] = (
+            item.get("manual_wrong_reason")
+            or item.get("ai_wrong_reason")
+            or item.get("wrong_reason")
+            or item.get("error_reason")
+            or ""
+        )
+        item["selected_supported"] = True
+        enriched.append(item)
+    return enriched
+
+
+def _create_wrong_retry_session(
+    *,
+    wrong_rows: list[dict[str, Any]],
+    retry_mode: str,
+    limit: int,
+    user_id: str,
+) -> dict[str, Any]:
+    selected = wrong_rows[: max(1, min(limit, 50))]
+    if not selected:
+        raise HTTPException(status_code=404, detail="Wrong question not found")
+
+    content = _content()
+    learning = _learning()
+    original_questions = {
+        item["question_id"]: question
+        for item in content.get_questions([row["question_id"] for row in selected])
+        for question in [item]
+    }
+    questions: list[dict[str, Any]] = []
+    source_by_question: dict[str, str] = {}
+    seen: set[str] = set()
+
+    def add_question(question: dict[str, Any] | None, source_question_id: str) -> None:
+        if not question:
+            return
+        question_id = str(question.get("question_id") or "")
+        if not question_id or question_id in seen:
+            return
+        seen.add(question_id)
+        questions.append(question)
+        source_by_question[question_id] = source_question_id
+
+    for row in selected:
+        original = original_questions.get(row["question_id"])
+        if retry_mode in {"original", "mixed"}:
+            add_question(original, row["question_id"])
+        if retry_mode in {"variant", "mixed"}:
+            variant = content.select_questions(
+                knowledge_id=str(row.get("knowledge_id") or ""),
+                question_type=str(row.get("question_type") or ""),
+                question_family="choice",
+                limit=1,
+                exclude_ids=[str(row["question_id"]), *seen],
+            )
+            add_question(variant[0] if variant else original, row["question_id"])
+        if len(questions) >= limit:
+            break
+
+    if not questions:
+        raise HTTPException(status_code=404, detail="No questions available for this retry request")
+
+    registered = learning.register_wrong_retry(
+        [str(row["wrong_id"]) for row in selected],
+        user_id,
+        retry_mode=retry_mode,
+    )
+    counted_question_ids = [str(row["question_id"]) for row in registered]
+    title = "Wrong question retry"
+    if retry_mode == "variant":
+        title = "Wrong question variant retry"
+    elif retry_mode == "mixed":
+        title = "Wrong question mixed retry"
+    session = learning.create_practice_session(
+        "wrong_retry",
+        title,
+        str(selected[0].get("knowledge_id") or ""),
+        [str(item["question_id"]) for item in questions],
+        ai_meta={
+            "message": "Wrong question retry session generated.",
+            "session_type": "wrong_retry",
+            "retry_mode": retry_mode,
+            "wrong_ids": [str(row["wrong_id"]) for row in selected],
+            "retry_counted_question_ids": counted_question_ids,
+            "source_question_id_by_question_id": source_by_question,
+        },
+        user_id=user_id,
+    )
+    session["questions"] = questions
+    session["wrong_questions"] = registered
+    return session
 
 
 @router.get("/content/health")
@@ -399,16 +524,100 @@ async def submit_practice(session_id: str, request: PracticeSubmitRequest, user:
 
 
 @router.get("/wrong-questions")
-async def wrong_questions(user: AuthUser = Depends(require_current_user)) -> list[dict[str, Any]]:
-    rows = _learning().list_wrong_questions(user.user_id)
-    question_rows = _content().get_questions([row["question_id"] for row in rows])
-    questions = {item["question_id"]: item for item in question_rows}
-    enriched = []
-    for row in rows:
-        item = dict(row)
-        item["question"] = questions.get(row["question_id"])
-        enriched.append(item)
-    return enriched
+async def wrong_questions(
+    knowledge_id: str | None = None,
+    question_type: str | None = None,
+    wrong_reason: str | None = None,
+    status: str | None = None,
+    sort: str = Query(default="default"),
+    limit: int = Query(default=100, ge=1, le=500),
+    offset: int = Query(default=0, ge=0),
+    user: AuthUser = Depends(require_current_user),
+) -> list[dict[str, Any]]:
+    rows = _learning().list_wrong_questions(
+        user.user_id,
+        knowledge_id=knowledge_id,
+        question_type=question_type,
+        wrong_reason=wrong_reason,
+        status=status,
+        sort=sort,
+        limit=limit,
+        offset=offset,
+    )
+    return _enrich_wrong_rows(rows)
+
+
+@router.get("/wrong-questions/summary")
+async def wrong_questions_summary(user: AuthUser = Depends(require_current_user)) -> dict[str, Any]:
+    summary = _learning().wrong_question_summary(user.user_id)
+    summary["wrong_count_top10"] = _enrich_wrong_rows(summary.get("wrong_count_top10") or [])
+    summary["repeated_wrong_questions"] = _enrich_wrong_rows(summary.get("repeated_wrong_questions") or [])
+    return summary
+
+
+@router.post("/wrong-questions/{wrong_id}/retry")
+async def retry_wrong_question(
+    wrong_id: str,
+    request: WrongQuestionRetryRequest,
+    user: AuthUser = Depends(require_current_user),
+) -> dict[str, Any]:
+    rows = _learning().wrong_questions_by_ids([wrong_id], user.user_id)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Wrong question not found")
+    return _create_wrong_retry_session(
+        wrong_rows=rows,
+        retry_mode=request.retry_mode,
+        limit=request.limit,
+        user_id=user.user_id,
+    )
+
+
+@router.post("/wrong-questions/batch-retry")
+async def batch_retry_wrong_questions(
+    request: WrongQuestionBatchRetryRequest,
+    user: AuthUser = Depends(require_current_user),
+) -> dict[str, Any]:
+    rows = _learning().wrong_questions_by_ids(request.wrong_ids, user.user_id)
+    if not rows:
+        raise HTTPException(status_code=404, detail="Wrong questions not found")
+    return _create_wrong_retry_session(
+        wrong_rows=rows,
+        retry_mode=request.retry_mode,
+        limit=request.limit,
+        user_id=user.user_id,
+    )
+
+
+@router.post("/wrong-questions/batch-action")
+async def batch_action_wrong_questions(
+    request: WrongQuestionBatchActionRequest,
+    user: AuthUser = Depends(require_current_user),
+) -> dict[str, Any]:
+    result = _learning().batch_update_wrong_questions(
+        request.wrong_ids,
+        request.action,
+        user.user_id,
+        wrong_reason=request.wrong_reason,
+    )
+    result["items"] = _enrich_wrong_rows(result.get("items") or [])
+    return result
+
+
+@router.post("/wrong-questions/{wrong_id}/reason")
+async def update_wrong_question_reason(
+    wrong_id: str,
+    request: WrongQuestionReasonRequest,
+    user: AuthUser = Depends(require_current_user),
+) -> dict[str, Any]:
+    row = _learning().update_wrong_reason(
+        wrong_id,
+        request.wrong_reason,
+        user.user_id,
+        reason_source=request.reason_source,
+    )
+    if row is None:
+        raise HTTPException(status_code=404, detail="Wrong question not found")
+    return _enrich_wrong_rows([row])[0]
 
 
 @router.get("/reviews/today")

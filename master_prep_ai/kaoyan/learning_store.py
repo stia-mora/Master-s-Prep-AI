@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections import Counter
 from datetime import date, datetime, timedelta, timezone
 from functools import lru_cache
 import json
@@ -228,8 +229,15 @@ class KaoyanLearningStore:
                     user_id TEXT NOT NULL,
                     question_id TEXT NOT NULL,
                     knowledge_id TEXT NOT NULL,
+                    question_type TEXT NOT NULL DEFAULT '',
                     error_reason TEXT NOT NULL DEFAULT '',
                     wrong_count INTEGER NOT NULL DEFAULT 1,
+                    retry_count INTEGER NOT NULL DEFAULT 0,
+                    manual_wrong_reason TEXT NOT NULL DEFAULT '',
+                    ai_wrong_reason TEXT NOT NULL DEFAULT '',
+                    is_focus INTEGER NOT NULL DEFAULT 0,
+                    last_retry_at TEXT,
+                    last_result TEXT NOT NULL DEFAULT '',
                     review_status TEXT NOT NULL DEFAULT 'pending',
                     last_wrong_at TEXT NOT NULL,
                     next_review_at TEXT NOT NULL,
@@ -366,6 +374,13 @@ class KaoyanLearningStore:
                 "recommendations_json",
                 "TEXT NOT NULL DEFAULT '[]'",
             )
+            self._ensure_column(conn, "wrong_question", "question_type", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "wrong_question", "retry_count", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "wrong_question", "manual_wrong_reason", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "wrong_question", "ai_wrong_reason", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_column(conn, "wrong_question", "is_focus", "INTEGER NOT NULL DEFAULT 0")
+            self._ensure_column(conn, "wrong_question", "last_retry_at", "TEXT")
+            self._ensure_column(conn, "wrong_question", "last_result", "TEXT NOT NULL DEFAULT ''")
             conn.commit()
 
     def _ensure_column(
@@ -574,6 +589,38 @@ class KaoyanLearningStore:
             ).fetchall()
         return [str(row["question_id"]) for row in rows]
 
+    def wrong_questions_by_ids(
+        self, wrong_ids: list[str], user_id: str = DEFAULT_USER_ID
+    ) -> list[dict[str, Any]]:
+        ids = [str(item) for item in wrong_ids if str(item)]
+        if not ids:
+            return []
+        placeholders = ",".join("?" for _ in ids)
+        with self._connect() as conn:
+            rows = conn.execute(
+                f"""
+                SELECT wrong_question.*,
+                       COALESCE(NULLIF(manual_wrong_reason, ''), NULLIF(ai_wrong_reason, ''), error_reason) AS wrong_reason,
+                       CASE
+                           WHEN is_focus = 1 THEN 'focus'
+                           WHEN review_status = 'mastered' THEN 'mastered'
+                           WHEN retry_count = 0 THEN 'pending_retry'
+                           WHEN last_result = 'wrong' THEN 'retry_failed'
+                           ELSE review_status
+                       END AS wrong_status,
+                       1 AS selected_supported
+                FROM wrong_question
+                WHERE user_id = ? AND wrong_id IN ({placeholders})
+                """,
+                tuple([user_id, *ids]),
+            ).fetchall()
+        by_id = {str(row["wrong_id"]): _row_to_dict(row) for row in rows}
+        result = [by_id[item] for item in ids if item in by_id]
+        for item in result:
+            item["is_focus"] = bool(item.get("is_focus"))
+            item["selected_supported"] = True
+        return result
+
     def record_practice_submission(self, session: dict[str, Any], results: list[dict[str, Any]], summary: str, next_actions: list[str], user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
         now = utc_now()
         total = len(results)
@@ -606,6 +653,23 @@ class KaoyanLearningStore:
                     conn.execute("UPDATE wrong_question SET review_status = 'mastered' WHERE user_id = ? AND question_id = ?", (user_id, item["question_id"]))
                 else:
                     self._upsert_wrong_question(conn, item, user_id, now)
+                if session.get("session_type") == "wrong_retry":
+                    retry_meta = session.get("ai_metadata") or {}
+                    counted_question_ids = set(retry_meta.get("retry_counted_question_ids") or [])
+                    source_question_id = str(
+                        (retry_meta.get("source_question_id_by_question_id") or {}).get(
+                            str(item.get("question_id") or ""),
+                            item.get("question_id") or "",
+                        )
+                    )
+                    self._record_wrong_retry_result(
+                        conn,
+                        item,
+                        user_id,
+                        now,
+                        source_question_id=source_question_id,
+                        increment_retry=source_question_id not in counted_question_ids,
+                    )
             record_id = f"rec_{uuid.uuid4().hex[:12]}"
             conn.execute(
                 """
@@ -651,19 +715,33 @@ class KaoyanLearningStore:
 
     def _upsert_wrong_question(self, conn: sqlite3.Connection, item: dict[str, Any], user_id: str, now: str) -> None:
         next_review = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+        error_reason = str(item.get("error_reason") or "")
         conn.execute(
             """
-            INSERT INTO wrong_question (wrong_id, user_id, question_id, knowledge_id, error_reason,
-                wrong_count, review_status, last_wrong_at, next_review_at)
-            VALUES (?, ?, ?, ?, ?, 1, 'pending', ?, ?)
+            INSERT INTO wrong_question (wrong_id, user_id, question_id, knowledge_id, question_type,
+                error_reason, wrong_count, retry_count, manual_wrong_reason, ai_wrong_reason,
+                is_focus, last_retry_at, last_result, review_status, last_wrong_at, next_review_at)
+            VALUES (?, ?, ?, ?, ?, ?, 1, 0, '', ?, 0, NULL, 'wrong', 'pending', ?, ?)
             ON CONFLICT(user_id, question_id) DO UPDATE SET
+                question_type = excluded.question_type,
                 error_reason = excluded.error_reason,
+                ai_wrong_reason = excluded.ai_wrong_reason,
                 wrong_count = wrong_count + 1,
                 review_status = 'pending',
                 last_wrong_at = excluded.last_wrong_at,
                 next_review_at = excluded.next_review_at
             """,
-            (f"wrong_{uuid.uuid4().hex[:12]}", user_id, item["question_id"], item["knowledge_id"], item.get("error_reason", ""), now, next_review),
+            (
+                f"wrong_{uuid.uuid4().hex[:12]}",
+                user_id,
+                item["question_id"],
+                item["knowledge_id"],
+                item.get("question_type", ""),
+                error_reason,
+                error_reason,
+                now,
+                next_review,
+            ),
         )
         self.upsert_review_item(
             conn,
@@ -677,6 +755,36 @@ class KaoyanLearningStore:
             priority_score=4.5,
             next_review_at=next_review,
             now=now,
+        )
+
+    def _record_wrong_retry_result(
+        self,
+        conn: sqlite3.Connection,
+        item: dict[str, Any],
+        user_id: str,
+        now: str,
+        *,
+        source_question_id: str,
+        increment_retry: bool,
+    ) -> None:
+        last_result = "correct" if item.get("is_correct") else "wrong"
+        conn.execute(
+            f"""
+            UPDATE wrong_question
+            SET retry_count = retry_count + ?,
+                last_retry_at = ?,
+                last_result = ?,
+                review_status = CASE WHEN ? = 'correct' THEN 'mastered' ELSE 'pending' END
+            WHERE user_id = ? AND question_id = ?
+            """,
+            (
+                1 if increment_retry else 0,
+                now,
+                last_result,
+                last_result,
+                user_id,
+                source_question_id,
+            ),
         )
 
     def upsert_review_item(self, conn: sqlite3.Connection, *, user_id: str, source_type: str, source_id: str, knowledge_id: str, title: str, prompt: str, answer: str, priority_score: float, next_review_at: str, now: str) -> None:
@@ -697,10 +805,210 @@ class KaoyanLearningStore:
             (f"rev_{uuid.uuid4().hex[:12]}", user_id, source_type, source_id, knowledge_id, title, prompt, answer, priority_score, next_review_at, now, now),
         )
 
-    def list_wrong_questions(self, user_id: str = DEFAULT_USER_ID) -> list[dict[str, Any]]:
+    def list_wrong_questions(
+        self,
+        user_id: str = DEFAULT_USER_ID,
+        *,
+        knowledge_id: str | None = None,
+        question_type: str | None = None,
+        wrong_reason: str | None = None,
+        status: str | None = None,
+        sort: str = "default",
+        limit: int = 100,
+        offset: int = 0,
+    ) -> list[dict[str, Any]]:
+        clauses = ["user_id = ?"]
+        params: list[Any] = [user_id]
+        if knowledge_id:
+            clauses.append("knowledge_id = ?")
+            params.append(knowledge_id)
+        if question_type:
+            clauses.append("question_type = ?")
+            params.append(question_type)
+        if wrong_reason:
+            clauses.append(
+                "(manual_wrong_reason = ? OR ai_wrong_reason = ? OR error_reason = ?)"
+            )
+            params.extend([wrong_reason, wrong_reason, wrong_reason])
+        if status:
+            if status == "focus":
+                clauses.append("is_focus = 1")
+            elif status == "pending_retry":
+                clauses.append("review_status != 'mastered' AND retry_count = 0")
+            elif status == "retry_failed":
+                clauses.append("last_result = 'wrong'")
+            else:
+                clauses.append("review_status = ?")
+                params.append(status)
+        order_by = {
+            "wrong_count": "wrong_count DESC, last_wrong_at DESC",
+            "recent": "last_wrong_at DESC, wrong_count DESC",
+            "knowledge": "knowledge_id ASC, wrong_count DESC",
+            "question_type": "question_type ASC, wrong_count DESC",
+            "retry_count": "retry_count DESC, last_retry_at DESC",
+            "status": "review_status ASC, wrong_count DESC",
+        }.get(sort, "review_status = 'mastered', is_focus DESC, wrong_count DESC, last_wrong_at DESC")
+        params.extend([max(1, min(int(limit), 500)), max(0, int(offset))])
         with self._connect() as conn:
-            rows = conn.execute("SELECT * FROM wrong_question WHERE user_id = ? ORDER BY review_status = 'mastered', wrong_count DESC, last_wrong_at DESC", (user_id,)).fetchall()
-        return [_row_to_dict(row) for row in rows]
+            rows = conn.execute(
+                f"""
+                SELECT wrong_question.*,
+                       COALESCE(NULLIF(manual_wrong_reason, ''), NULLIF(ai_wrong_reason, ''), error_reason) AS wrong_reason,
+                       CASE
+                           WHEN is_focus = 1 THEN 'focus'
+                           WHEN review_status = 'mastered' THEN 'mastered'
+                           WHEN retry_count = 0 THEN 'pending_retry'
+                           WHEN last_result = 'wrong' THEN 'retry_failed'
+                           ELSE review_status
+                       END AS wrong_status,
+                       1 AS selected_supported
+                FROM wrong_question
+                WHERE {" AND ".join(clauses)}
+                ORDER BY {order_by}
+                LIMIT ? OFFSET ?
+                """,
+                tuple(params),
+            ).fetchall()
+        result = [_row_to_dict(row) for row in rows]
+        for item in result:
+            item["is_focus"] = bool(item.get("is_focus"))
+            item["selected_supported"] = True
+        return result
+
+    def wrong_question_summary(self, user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
+        rows = self.list_wrong_questions(user_id, limit=500)
+        active = [item for item in rows if item.get("review_status") != "mastered"]
+
+        def distribution(key: str) -> list[dict[str, Any]]:
+            counts = Counter(str(item.get(key) or "未标注") for item in rows)
+            return [
+                {"key": key_value, "count": count}
+                for key_value, count in counts.most_common()
+            ]
+
+        wrong_count_top = sorted(
+            rows,
+            key=lambda item: (int(item.get("wrong_count") or 0), str(item.get("last_wrong_at") or "")),
+            reverse=True,
+        )[:10]
+        repeated = [
+            item
+            for item in rows
+            if int(item.get("wrong_count") or 0) >= 2 or item.get("last_result") == "wrong"
+        ][:10]
+        return {
+            "total": len(rows),
+            "unmastered": len(active),
+            "focus_count": sum(1 for item in rows if item.get("is_focus")),
+            "pending_retry": sum(1 for item in rows if int(item.get("retry_count") or 0) == 0 and item.get("review_status") != "mastered"),
+            "by_knowledge": distribution("knowledge_id"),
+            "by_question_type": distribution("question_type"),
+            "by_wrong_reason": distribution("wrong_reason"),
+            "wrong_count_top10": wrong_count_top,
+            "repeated_wrong_questions": repeated,
+        }
+
+    def register_wrong_retry(
+        self,
+        wrong_ids: list[str],
+        user_id: str = DEFAULT_USER_ID,
+        *,
+        retry_mode: str = "original",
+    ) -> list[dict[str, Any]]:
+        rows = self.wrong_questions_by_ids(wrong_ids, user_id)
+        if not rows:
+            return []
+        now = utc_now()
+        ids = [str(item["wrong_id"]) for item in rows]
+        placeholders = ",".join("?" for _ in ids)
+        with self._connect() as conn:
+            conn.execute(
+                f"""
+                UPDATE wrong_question
+                SET retry_count = retry_count + 1,
+                    last_retry_at = ?,
+                    last_result = '',
+                    review_status = CASE WHEN review_status = 'mastered' THEN 'reviewed' ELSE review_status END
+                WHERE user_id = ? AND wrong_id IN ({placeholders})
+                """,
+                tuple([now, user_id, *ids]),
+            )
+            conn.commit()
+        return self.wrong_questions_by_ids(ids, user_id)
+
+    def update_wrong_reason(
+        self,
+        wrong_id: str,
+        wrong_reason: str,
+        user_id: str = DEFAULT_USER_ID,
+        *,
+        reason_source: str = "manual",
+    ) -> dict[str, Any] | None:
+        column = "ai_wrong_reason" if reason_source == "ai" else "manual_wrong_reason"
+        with self._connect() as conn:
+            row = conn.execute(
+                "SELECT wrong_id FROM wrong_question WHERE user_id = ? AND wrong_id = ?",
+                (user_id, wrong_id),
+            ).fetchone()
+            if row is None:
+                return None
+            conn.execute(
+                f"UPDATE wrong_question SET {column} = ? WHERE user_id = ? AND wrong_id = ?",
+                (wrong_reason.strip(), user_id, wrong_id),
+            )
+            conn.commit()
+        rows = self.wrong_questions_by_ids([wrong_id], user_id)
+        return rows[0] if rows else None
+
+    def batch_update_wrong_questions(
+        self,
+        wrong_ids: list[str],
+        action: str,
+        user_id: str = DEFAULT_USER_ID,
+        *,
+        wrong_reason: str = "",
+    ) -> dict[str, Any]:
+        rows = self.wrong_questions_by_ids(wrong_ids, user_id)
+        if not rows:
+            return {"action": action, "affected_count": 0, "items": []}
+        ids = [str(item["wrong_id"]) for item in rows]
+        placeholders = ",".join("?" for _ in ids)
+        now = utc_now()
+        with self._connect() as conn:
+            if action == "mark_focus":
+                conn.execute(
+                    f"UPDATE wrong_question SET is_focus = 1 WHERE user_id = ? AND wrong_id IN ({placeholders})",
+                    tuple([user_id, *ids]),
+                )
+            elif action == "unmark_focus":
+                conn.execute(
+                    f"UPDATE wrong_question SET is_focus = 0 WHERE user_id = ? AND wrong_id IN ({placeholders})",
+                    tuple([user_id, *ids]),
+                )
+            elif action == "set_reason":
+                conn.execute(
+                    f"UPDATE wrong_question SET manual_wrong_reason = ? WHERE user_id = ? AND wrong_id IN ({placeholders})",
+                    tuple([wrong_reason.strip(), user_id, *ids]),
+                )
+            elif action == "add_to_review":
+                next_review = (datetime.now(timezone.utc) + timedelta(days=1)).isoformat()
+                for item in rows:
+                    self.upsert_review_item(
+                        conn,
+                        user_id=user_id,
+                        source_type="wrong_question",
+                        source_id=str(item.get("question_id") or ""),
+                        knowledge_id=str(item.get("knowledge_id") or ""),
+                        title=f"Wrong question retry {item.get('question_id')}",
+                        prompt="",
+                        answer="",
+                        priority_score=5.0,
+                        next_review_at=next_review,
+                        now=now,
+                    )
+            conn.commit()
+        updated = self.wrong_questions_by_ids(ids, user_id)
+        return {"action": action, "affected_count": len(updated), "items": updated}
 
     def list_reviews_today(self, user_id: str = DEFAULT_USER_ID) -> list[dict[str, Any]]:
         with self._connect() as conn:

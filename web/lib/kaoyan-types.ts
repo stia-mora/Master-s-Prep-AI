@@ -317,12 +317,39 @@ export interface WrongQuestion {
   wrong_id: string;
   question_id: string;
   knowledge_id: string;
+  question_type?: string;
   error_reason: string;
+  wrong_reason?: string;
   wrong_count: number;
+  retry_count?: number;
+  manual_wrong_reason?: string;
+  ai_wrong_reason?: string;
+  is_focus?: boolean;
+  last_retry_at?: string | null;
+  last_result?: string;
   review_status: string;
+  wrong_status?: string;
+  selected_supported?: boolean;
   last_wrong_at: string;
   next_review_at: string;
   question?: ContentQuestion | null;
+}
+
+export interface WrongQuestionDistributionItem {
+  key: string;
+  count: number;
+}
+
+export interface WrongQuestionSummary {
+  total: number;
+  unmastered: number;
+  focus_count: number;
+  pending_retry: number;
+  by_knowledge: WrongQuestionDistributionItem[];
+  by_question_type: WrongQuestionDistributionItem[];
+  by_wrong_reason: WrongQuestionDistributionItem[];
+  wrong_count_top10: WrongQuestion[];
+  repeated_wrong_questions: WrongQuestion[];
 }
 
 export interface ReviewItem {
