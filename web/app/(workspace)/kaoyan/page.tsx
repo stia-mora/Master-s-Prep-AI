@@ -1,8 +1,9 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BarChart3, BookOpenCheck, Brain, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Download, GraduationCap, Loader2, MessageCircleQuestion, PlayCircle, RefreshCw, RotateCcw, Sparkles, Target, Upload } from "lucide-react";
+import { BarChart3, BookOpenCheck, Brain, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Download, FileText, GraduationCap, Loader2, MessageCircleQuestion, PlayCircle, RefreshCw, RotateCcw, Sparkles, Target, Upload } from "lucide-react";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 import { useUnifiedChat } from "@/context/UnifiedChatContext";
 import { createDiagnosticSession, createKaoyanChatContext, createPracticePdf, downloadPracticePdf as downloadPracticePdfBlob, explainLearningStageAgain, generatePlan, generatePractice, getDashboardSummary, getDiagnosticReports, getLearningPath, confirmDiagnosticReport, getKnowledgeDetail, getKnowledgeTree, getReviewsToday, getTodayTasks, getWrongQuestions, initProfile, refreshLearningPath, startLearningStage, submitDiagnostic, submitPractice, submitReview, updateTaskStatus } from "@/lib/kaoyan-api";
@@ -299,7 +300,7 @@ export default function KaoyanPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[var(--background)]" translate="no">
       <header className="border-b border-[var(--border)] bg-[var(--card)] px-6 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)]"><GraduationCap size={22} /></div><div><h1 className="text-xl font-semibold text-[var(--foreground)]">AI 考研助手</h1><p className="text-sm text-[var(--muted-foreground)]">高数 MVP：画像、诊断、计划、练习、错题、复习、反馈闭环</p></div></div><button onClick={() => void refresh()} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"><RefreshCw size={15} /> 刷新</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)]"><GraduationCap size={22} /></div><div><h1 className="text-xl font-semibold text-[var(--foreground)]">AI 考研助手</h1><p className="text-sm text-[var(--muted-foreground)]">高数 MVP：画像、诊断、计划、练习、错题、复习、反馈闭环</p></div></div><div className="flex flex-wrap items-center gap-2"><Link href="/kaoyan/paper-assembly" className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"><FileText size={15} /> 408 组卷</Link><button onClick={() => void refresh()} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"><RefreshCw size={15} /> 刷新</button></div></div>
         <nav className="mt-4 flex flex-wrap gap-2">{tabs.map((tab) => { const Icon = tab.icon; const active = activeTab === tab.id; return <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${active ? "bg-[var(--foreground)] text-[var(--background)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"}`}><Icon size={15} /> {tab.label}</button>; })}</nav>
       </header>
       <main className="flex-1 overflow-y-auto px-6 py-5">

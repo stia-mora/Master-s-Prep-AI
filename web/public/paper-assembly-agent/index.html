@@ -1,0 +1,258 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>题型组卷 Agent</title>
+    <link rel="stylesheet" href="/paper-assembly-agent/styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="topbar">
+        <div class="topbar-row">
+          <div class="topbar-copy">
+            <span class="topbar-kicker">Paper Assembly</span>
+            <h2>题型组卷工作台</h2>
+            <p>题库管理、当前试卷、错题重刷统一处理。</p>
+          </div>
+          <button class="secondary-button" id="refreshButton">刷新数据</button>
+        </div>
+        <div class="workspace-bar">
+          <div class="workspace-brand">
+            <span class="brand-mark">C</span>
+            <span>
+              <strong>题型组卷 Agent</strong>
+              <small>408 结构、错题重刷、题型专项</small>
+            </span>
+          </div>
+          <nav class="nav" aria-label="功能">
+            <button class="nav-button is-active" data-view="view-original">题库</button>
+            <button class="nav-button" data-view="view-paper">当前试卷</button>
+            <button class="nav-button" data-view="view-notes">我的标注</button>
+            <button class="nav-button" data-view="view-wrong">错题库</button>
+            <button class="nav-button" data-view="view-assemble">组卷</button>
+          </nav>
+          <div class="workspace-stat" id="sidebarStat">正在读取题库...</div>
+        </div>
+      </section>
+
+      <section class="view" id="view-assemble">
+        <div class="assemble-step is-visible" id="assembleEntryView">
+          <div class="section-head">
+            <h3>选择题源</h3>
+            <p>先选择使用系统题库，或上传自己的资料。</p>
+          </div>
+          <div class="entry-grid">
+            <button class="entry-card" type="button" data-action="open-system-assemble">
+              <strong>系统题库</strong>
+              <span>使用内置 408 原卷、错题库和题型结构组卷。</span>
+            </button>
+            <button class="entry-card" type="button" data-action="open-upload-assemble">
+              <strong>上传资料</strong>
+              <span>上传 PDF、Markdown 或 TXT，补充自己的题源。</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="assemble-step" id="systemAssembleView">
+          <div class="step-head">
+            <button class="secondary-button compact-button" type="button" data-action="back-assemble-home">返回选择</button>
+            <div>
+              <h3>系统题库组卷</h3>
+              <p>选择科目后，再选择组卷方式。</p>
+            </div>
+          </div>
+          <div class="subject-grid clean-subject-grid" id="subjectGrid"></div>
+
+          <div class="selection-hint" id="assemblyGate">请先勾选一个科目，再选择组卷方式。</div>
+
+          <div class="assembly-options" id="assemblyOptions" hidden>
+            <div class="assemble-mode-tabs">
+              <button class="assemble-choice is-active" type="button" data-assemble-panel="real">按真题组卷</button>
+              <button class="assemble-choice" type="button" data-assemble-panel="wrong">按错题组卷</button>
+            </div>
+
+            <div class="assemble-config">
+              <form class="assemble-panel is-visible" id="realExamForm" data-panel="real">
+                <div class="panel-title compact">
+                  <h3>按真题组卷</h3>
+                  <p>可按完整真题结构组卷，也可按真题题型数量做专项卷。</p>
+                </div>
+                <fieldset class="segmented">
+                  <label><input type="radio" name="real_mode" value="whole" checked> 按整套</label>
+                  <label><input type="radio" name="real_mode" value="type"> 按题型</label>
+                </fieldset>
+                <label>
+                  题源范围
+                  <select name="source_scope">
+                    <option value="all">全部 Markdown 数据</option>
+                    <option value="exam408">仅 408 真题</option>
+                    <option value="practice">仅练习题</option>
+                  </select>
+                </label>
+                <div class="real-mode-panel is-visible" data-real-panel="whole">
+                  <p class="form-note">按 408 真题结构生成 40 道单选、7 道综合题。</p>
+                </div>
+                <div class="real-mode-panel" data-real-panel="type">
+                  <div class="form-grid">
+                    <label>
+                      板块
+                      <select id="moduleSelect" name="module_id">
+                        <option value="all">全部板块</option>
+                      </select>
+                    </label>
+                    <label>
+                      题型
+                      <select id="questionTypeSelect" name="question_type">
+                      </select>
+                    </label>
+                    <label>
+                      题量
+                      <select name="count_mode">
+                        <option value="template">与真题对应题型数量一致</option>
+                        <option value="custom">自定义数量</option>
+                      </select>
+                    </label>
+                    <label id="customCountField" class="custom-count-field" hidden>
+                      自定义数量
+                      <input name="limit" type="number" min="1" max="80" value="8">
+                    </label>
+                  </div>
+                  <label>
+                    关键词（可选）
+                    <input name="knowledge" type="search" placeholder="例如 树、Cache、进程、TCP">
+                  </label>
+                </div>
+                <button class="primary-button" id="realExamSubmit" type="submit">生成真题格式卷</button>
+              </form>
+
+              <form class="assemble-panel" id="wrongPaperForm" data-panel="wrong">
+                <div class="panel-title compact">
+                  <h3>按错题组卷</h3>
+                  <p>按 408 板块分值比例换算，从错题库生成重刷卷。</p>
+                </div>
+                <fieldset class="segmented">
+                  <label><input type="radio" name="wrong_mode" value="same_count" checked> 题目数量一致</label>
+                  <label><input type="radio" name="wrong_mode" value="random_by_minutes"> 按预计时间随机</label>
+                </fieldset>
+                <label>
+                  预计用时（分钟）
+                  <input name="minutes" type="number" min="5" max="180" value="45">
+                </label>
+                <button class="primary-button" type="submit">生成错题卷</button>
+              </form>
+            </div>
+          </div>
+        </div>
+
+        <div class="assemble-step" id="uploadAssembleView">
+          <div class="step-head">
+            <button class="secondary-button compact-button" type="button" data-action="back-assemble-home">返回选择</button>
+            <div>
+              <h3>上传资料</h3>
+              <p>上传 PDF、Markdown 或 TXT，作为后续原卷、错题和组卷的题源。</p>
+            </div>
+          </div>
+          <form class="upload-page" id="uploadForm">
+            <label>
+              资料文件
+              <input id="uploadFile" name="file" type="file" accept=".pdf,.md,.txt,application/pdf,text/markdown,text/plain">
+            </label>
+            <button class="primary-button" type="submit">上传到题库</button>
+            <p class="upload-status" id="uploadStatus">PDF 会进入待解析区，Markdown/TXT 会自动写入用户题库。</p>
+          </form>
+        </div>
+      </section>
+
+      <section class="view" id="view-paper">
+        <div class="empty" id="paperEmpty">
+          <h3>还没有打开试卷</h3>
+          <p>从“题库”选择原题，或从“组卷”生成试卷后，这里会显示可标记、可加入错题的题目。</p>
+        </div>
+        <div id="paperView" class="paper-view"></div>
+      </section>
+
+      <section class="view" id="view-notes">
+        <div class="toolbar">
+          <div>
+            <h3>我的标注</h3>
+            <p id="annotationSummaryText">备注、重点、标黄和下划线会保存在这里，不等于错题。</p>
+          </div>
+        </div>
+        <div class="annotation-list" id="annotationList"></div>
+      </section>
+
+      <section class="view" id="view-wrong">
+        <div class="toolbar">
+          <div>
+            <h3>错题库</h3>
+            <p id="wrongSummaryText">正在读取错题...</p>
+          </div>
+          <button class="primary-button" id="selectedWrongPaperButton">用勾选错题组卷</button>
+        </div>
+        <div class="wrong-index">
+          <label class="search-field wrong-search">
+            索引错题
+            <input id="wrongSearch" type="search" placeholder="搜索题目、来源、备注、错因或标签">
+          </label>
+          <div class="subject-filter" id="wrongSubjectFilter" aria-label="错题科目筛选"></div>
+        </div>
+        <div class="wrong-list" id="wrongList"></div>
+      </section>
+
+      <section class="view is-visible" id="view-original">
+        <div class="bank-step is-visible" id="bankEntryView">
+          <div class="section-head">
+            <h3>题库</h3>
+            <p>选择系统自带原题，或查看从组卷上传的原题。</p>
+          </div>
+          <div class="entry-grid">
+            <button class="entry-card" type="button" data-action="open-system-bank">
+              <strong>系统自带原题</strong>
+              <span>浏览内置 408 原卷，按年份直接进入当前试卷。</span>
+            </button>
+            <button class="entry-card" type="button" data-action="open-uploaded-bank">
+              <strong>我的上传</strong>
+              <span>查看从组卷上传的 PDF、Markdown 和 TXT 资料。</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="bank-step" id="systemBankView">
+          <div class="step-head bank-step-head">
+            <button class="secondary-button compact-button" type="button" data-action="back-bank-home">返回选择</button>
+            <div>
+              <h3>系统自带原题</h3>
+              <p>按科目选择原始真题，一键进入当前试卷。</p>
+            </div>
+          </div>
+          <label class="search-field bank-search">
+            搜索原题
+            <input id="originalSearch" type="search" placeholder="输入年份或科目，例如 2024、计算机">
+          </label>
+          <div class="section-head">
+            <h3>选择科目</h3>
+            <p>先勾选一个科目，再浏览对应原题。</p>
+          </div>
+          <div class="subject-grid" id="originalSubjectGrid"></div>
+          <div class="selection-hint" id="originalGate">请先勾选一个科目，再浏览原题。</div>
+          <div class="original-list" id="originalList"></div>
+        </div>
+
+        <div class="bank-step" id="uploadedBankView">
+          <div class="step-head">
+            <button class="secondary-button compact-button" type="button" data-action="back-bank-home">返回选择</button>
+            <div>
+              <h3>我的上传</h3>
+              <p>这里显示从组卷页上传的资料。</p>
+            </div>
+          </div>
+          <div class="original-list" id="uploadedOriginalList"></div>
+        </div>
+      </section>
+    </main>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <script src="/paper-assembly-agent/app.js"></script>
+  </body>
+</html>

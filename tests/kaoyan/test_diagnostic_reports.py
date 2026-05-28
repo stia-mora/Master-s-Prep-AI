@@ -11,7 +11,11 @@ from master_prep_ai.api.routers import kaoyan as kaoyan_router
 from master_prep_ai.kaoyan.content_store import KaoyanContentStore
 from master_prep_ai.kaoyan.learning_path import KaoyanLearningPathService
 from master_prep_ai.kaoyan.learning_store import KaoyanLearningStore
-from master_prep_ai.kaoyan.pdf_renderer import PdfRenderError, build_practice_tex, render_practice_pdf
+from master_prep_ai.kaoyan.pdf_renderer import (
+    PdfRenderError,
+    build_practice_tex,
+    render_practice_pdf,
+)
 from master_prep_ai.kaoyan.practice import KaoyanPracticeService
 
 

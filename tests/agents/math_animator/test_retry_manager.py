@@ -4,7 +4,11 @@ import asyncio
 
 import pytest
 
-from master_prep_ai.agents.math_animator.models import GeneratedCode, RenderResult, VisualReviewResult
+from master_prep_ai.agents.math_animator.models import (
+    GeneratedCode,
+    RenderResult,
+    VisualReviewResult,
+)
 from master_prep_ai.agents.math_animator.renderer import ManimRenderError
 from master_prep_ai.agents.math_animator.retry_manager import CodeRetryManager
 
