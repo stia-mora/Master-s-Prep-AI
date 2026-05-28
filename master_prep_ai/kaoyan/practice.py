@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import re
 from typing import Any
+import uuid
 
 from .ai_service import KaoyanAIService
 from .content_store import KaoyanContentStore
@@ -52,6 +53,53 @@ FREE_RESPONSE_GRADING_PROMPT = """
 只输出 JSON。
 """.strip()
 
+QUESTION_GENERATION_SYSTEM_PROMPT = """
+你是考研数学关卡练习出题老师。只输出 JSON，不要 Markdown。
+JSON 结构必须是 {"questions": [...]}。每道题必须包含：
+question_id, knowledge_id, question_type, difficulty_level, stem, options, answer, analysis。
+选择题 options 必须是 [{"label":"A","content":"..."}, ...]，answer 必须是 A/B/C/D。
+题目必须严格围绕给定 knowledge_id，不要混入无关知识点。
+""".strip()
+
+
+QUESTION_GENERATION_PROMPT = """
+请围绕下面的关卡上下文生成 {limit} 道 {kind_label}。
+允许的 knowledge_id: {knowledge_ids}
+关卡标题: {stage_title}
+来源: {source_label}
+题型: {question_family}
+难度目标: {difficulty_hint}
+要求：题干清晰、答案唯一、解析能说明关键步骤，避免与已有题干重复。
+""".strip()
+
+
+EXPLAIN_AGAIN_SYSTEM_PROMPT = """
+你是考研数学闯关学习导师。用中文解释，直接给学生可执行的理解路径。
+不要泛泛鼓励，不要输出 JSON。
+""".strip()
+
+
+QUESTION_KIND_LABELS = {
+    "basic": "基础题",
+    "variant": "变式题",
+    "challenge": "挑战题",
+}
+
+SOURCE_LABELS = {
+    "stage": "关卡练习",
+    "wrong_retry": "错题重刷",
+    "knowledge": "知识点新增题",
+    "diagnostic": "诊断推荐",
+}
+
+EXPLAIN_MODE_LABELS = {
+    "basic": "从基础讲",
+    "example": "举例讲",
+    "visual": "用图像直觉讲",
+    "mistake_based": "针对错因讲",
+    "analogy": "换个类比讲",
+}
+
 
 def normalize_answer(value: str | None) -> str:
     text = str(value or "").strip().translate(_OPTION_TRANSLATION)
@@ -82,6 +130,146 @@ class KaoyanPracticeService:
         self.learning_store = learning_store
         self.ai = KaoyanAIService(learning_store)
 
+    async def generate_practice(
+        self,
+        *,
+        source: str = "knowledge",
+        stage_id: str | None = None,
+        origin_id: str | None = None,
+        tab_id: str | None = None,
+        knowledge_id: str | None = None,
+        source_question_id: str | None = None,
+        question_type: str | None = None,
+        question_family: str = "choice",
+        question_kind: str = "basic",
+        difficulty_level: int | None = None,
+        limit: int = 5,
+        user_id: str = DEFAULT_USER_ID,
+    ) -> dict[str, Any]:
+        source = source if source in SOURCE_LABELS else "knowledge"
+        question_kind = question_kind if question_kind in QUESTION_KIND_LABELS else "basic"
+        question_family = "free_response" if question_family == "free_response" else "choice"
+        stage_context = self.learning_store.get_stage_context(stage_id or "", user_id) if stage_id else None
+        if stage_id and stage_context is None:
+            return {}
+        allowed_knowledge_ids = self._resolve_generation_knowledge_ids(
+            source=source,
+            stage_context=stage_context,
+            knowledge_id=knowledge_id,
+            origin_id=origin_id,
+            source_question_id=source_question_id,
+            user_id=user_id,
+        )
+        difficulty = difficulty_level or self._difficulty_for_kind(question_kind)
+        source_label = SOURCE_LABELS[source]
+        title = self._practice_title(source_label, question_kind, stage_context, knowledge_id)
+        generated_questions, ai_meta = await self._try_generate_questions(
+            allowed_knowledge_ids=allowed_knowledge_ids,
+            stage_context=stage_context,
+            source=source,
+            source_label=source_label,
+            question_family=question_family,
+            question_kind=question_kind,
+            difficulty_level=difficulty,
+            limit=limit,
+            user_id=user_id,
+        )
+        questions = generated_questions
+        if not questions:
+            questions = self._select_questions_for_knowledge_ids(
+                allowed_knowledge_ids,
+                question_family=question_family,
+                question_type=question_type,
+                difficulty_level=difficulty,
+                limit=limit,
+            )
+            if not questions and source == "wrong_retry":
+                questions = self.create_session(
+                    session_type="wrong_retry",
+                    question_family=question_family,
+                    difficulty_level=difficulty,
+                    limit=limit,
+                    user_id=user_id,
+                    source=source,
+                    source_label=source_label,
+                    origin_id=origin_id or source_question_id or "",
+                    stage_id=stage_id or "",
+                    tab_id=tab_id or "",
+                ).get("questions", [])
+        question_ids = [str(item["question_id"]) for item in questions]
+        session = self.learning_store.create_practice_session(
+            session_type="stage_practice" if source == "stage" else source,
+            title=title,
+            knowledge_id=(allowed_knowledge_ids[0] if allowed_knowledge_ids else knowledge_id or ""),
+            question_ids=question_ids,
+            ai_meta={
+                "message": ai_meta.get("message") or "Practice questions were selected by stage filters.",
+                "source": source,
+                "source_label": source_label,
+                "origin_id": origin_id or source_question_id or "",
+                "stage_id": stage_id or "",
+                "tab_id": tab_id or "",
+                "question_kind": question_kind,
+                "generated_questions": generated_questions,
+                "allowed_knowledge_ids": allowed_knowledge_ids,
+                "stage_context": stage_context or {},
+            },
+            user_id=user_id,
+            source=source,
+            source_label=source_label,
+            origin_id=origin_id or source_question_id or "",
+            stage_id=stage_id or "",
+            tab_id=tab_id or "",
+        )
+        session["questions"] = questions
+        return session
+
+    async def explain_again(
+        self,
+        *,
+        stage_id: str,
+        mode: str,
+        user_id: str = DEFAULT_USER_ID,
+    ) -> dict[str, Any] | None:
+        mode = mode if mode in EXPLAIN_MODE_LABELS else "basic"
+        stage_context = self.learning_store.get_stage_context(stage_id, user_id)
+        if stage_context is None:
+            return None
+        knowledge_ids = [str(item) for item in stage_context.get("knowledge_ids") or [] if str(item)]
+        primary_knowledge_id = knowledge_ids[0] if knowledge_ids else ""
+        knowledge_detail = self.content_store.get_knowledge(primary_knowledge_id, question_limit=3) if primary_knowledge_id else None
+        examples = (knowledge_detail or {}).get("questions") or []
+        example_question = examples[0] if examples else {}
+        fallback = self._fallback_explanation(stage_context, knowledge_detail, mode, example_question)
+        prompt = (
+            f"关卡：{stage_context.get('title')}\n"
+            f"知识点：{knowledge_ids}\n"
+            f"讲法模式：{EXPLAIN_MODE_LABELS[mode]}\n"
+            f"知识材料：{((knowledge_detail or {}).get('knowledge') or {}).get('raw_markdown', '')[:1200]}\n"
+            f"例题：{example_question.get('stem', '')[:800]}\n"
+            "请换一种讲法，最后给出一个下一步练习建议。"
+        )
+        content, meta = await self.ai.complete_text(
+            action_type="explanation_variant",
+            system_prompt=EXPLAIN_AGAIN_SYSTEM_PROMPT,
+            prompt=prompt,
+            fallback=fallback,
+            user_id=user_id,
+        )
+        variant = self.learning_store.record_explanation_variant(
+            user_id=user_id,
+            stage_id=stage_id,
+            mode=mode,
+            content=content,
+            example_question=example_question,
+        )
+        variant["ai_metadata"] = meta
+        return {
+            "stage_context": stage_context,
+            "explanation_variant": variant,
+            "history": self.learning_store.list_explanation_variants(stage_id, user_id),
+        }
+
     def create_session(
         self,
         *,
@@ -93,6 +281,11 @@ class KaoyanPracticeService:
         difficulty_level: int | None = None,
         limit: int = 5,
         user_id: str = DEFAULT_USER_ID,
+        source: str = "knowledge",
+        source_label: str = "",
+        origin_id: str = "",
+        stage_id: str = "",
+        tab_id: str = "",
     ) -> dict[str, Any]:
         question_family = "free_response" if question_family == "free_response" else "choice"
         questions: list[dict[str, Any]]
@@ -169,11 +362,265 @@ class KaoyanPracticeService:
             title=title,
             knowledge_id=knowledge_id or (questions[0]["knowledge_id"] if questions else ""),
             question_ids=[item["question_id"] for item in questions],
-            ai_meta={"message": "Practice questions were generated by filters.", "session_type": session_type, "question_family": question_family},
+            ai_meta={
+                "message": "Practice questions were generated by filters.",
+                "session_type": session_type,
+                "question_family": question_family,
+                "source": source,
+                "source_label": source_label or SOURCE_LABELS.get(source, "知识点新增题"),
+                "origin_id": origin_id,
+                "stage_id": stage_id,
+                "tab_id": tab_id,
+            },
             user_id=user_id,
+            source=source,
+            source_label=source_label or SOURCE_LABELS.get(source, "知识点新增题"),
+            origin_id=origin_id,
+            stage_id=stage_id,
+            tab_id=tab_id,
         )
         session["questions"] = questions
         return session
+
+    def _resolve_generation_knowledge_ids(
+        self,
+        *,
+        source: str,
+        stage_context: dict[str, Any] | None,
+        knowledge_id: str | None,
+        origin_id: str | None,
+        source_question_id: str | None,
+        user_id: str,
+    ) -> list[str]:
+        candidates: list[str] = []
+        if stage_context:
+            candidates.extend(str(item) for item in stage_context.get("knowledge_ids") or [] if str(item))
+        if knowledge_id:
+            candidates.append(knowledge_id)
+        source_qid = source_question_id or origin_id
+        if source_qid:
+            source_question = self.content_store.get_question(source_qid)
+            if source_question and source_question.get("knowledge_id"):
+                candidates.append(str(source_question["knowledge_id"]))
+        if source == "diagnostic" and not candidates:
+            dashboard = self.learning_store.dashboard_summary(user_id)
+            candidates.extend(str(item) for item in dashboard.get("weak_knowledge_ids") or [] if str(item))
+        resolved: list[str] = []
+        for candidate in candidates:
+            mapped = self.content_store.resolve_practice_knowledge_ids(candidate)
+            resolved.extend(mapped or [candidate])
+        seen: set[str] = set()
+        unique = []
+        for item in resolved:
+            if item and item not in seen:
+                seen.add(item)
+                unique.append(item)
+        return unique
+
+    def _difficulty_for_kind(self, question_kind: str) -> int:
+        if question_kind == "challenge":
+            return 4
+        if question_kind == "variant":
+            return 3
+        return 2
+
+    def _practice_title(
+        self,
+        source_label: str,
+        question_kind: str,
+        stage_context: dict[str, Any] | None,
+        knowledge_id: str | None,
+    ) -> str:
+        base = stage_context.get("title") if stage_context else ""
+        if not base and knowledge_id:
+            detail = self.content_store.get_knowledge(knowledge_id, question_limit=1)
+            base = ((detail or {}).get("knowledge") or {}).get("knowledge_name", "")
+        return f"{source_label} · {QUESTION_KIND_LABELS.get(question_kind, '基础题')}{f'：{base}' if base else ''}"
+
+    def _select_questions_for_knowledge_ids(
+        self,
+        knowledge_ids: list[str],
+        *,
+        question_family: str,
+        question_type: str | None,
+        difficulty_level: int | None,
+        limit: int,
+    ) -> list[dict[str, Any]]:
+        questions: list[dict[str, Any]] = []
+        seen: set[str] = set()
+        for knowledge_id in knowledge_ids:
+            if len(questions) >= limit:
+                break
+            batch = self.content_store.select_questions(
+                knowledge_id=knowledge_id,
+                question_type=question_type,
+                question_family=question_family,
+                difficulty_level=difficulty_level,
+                limit=max(1, limit - len(questions)),
+            )
+            if len(batch) < max(1, limit - len(questions)):
+                batch.extend(
+                    self.content_store.select_questions(
+                        knowledge_id=knowledge_id,
+                        question_type=question_type,
+                        question_family=question_family,
+                        limit=max(1, limit - len(questions) - len(batch)),
+                        exclude_ids=[item["question_id"] for item in batch],
+                    )
+                )
+            for question in batch:
+                question_id = str(question.get("question_id") or "")
+                if question_id and question_id not in seen:
+                    seen.add(question_id)
+                    questions.append(question)
+                if len(questions) >= limit:
+                    break
+        return questions
+
+    async def _try_generate_questions(
+        self,
+        *,
+        allowed_knowledge_ids: list[str],
+        stage_context: dict[str, Any] | None,
+        source: str,
+        source_label: str,
+        question_family: str,
+        question_kind: str,
+        difficulty_level: int,
+        limit: int,
+        user_id: str,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        if not allowed_knowledge_ids:
+            return [], {"ai_used": False, "status": "fallback", "message": "缺少可映射知识点，已跳过生成题"}
+        parsed, meta = await self.ai.complete_json(
+            action_type="stage_question_generate",
+            system_prompt=QUESTION_GENERATION_SYSTEM_PROMPT,
+            prompt=QUESTION_GENERATION_PROMPT.format(
+                limit=max(1, min(limit, 10)),
+                kind_label=QUESTION_KIND_LABELS[question_kind],
+                knowledge_ids=", ".join(allowed_knowledge_ids),
+                stage_title=(stage_context or {}).get("title", ""),
+                source_label=source_label,
+                question_family=question_family,
+                difficulty_hint=difficulty_level,
+            ),
+            user_id=user_id,
+        )
+        raw_questions = parsed.get("questions") if isinstance(parsed, dict) else None
+        if not isinstance(raw_questions, list):
+            return [], meta
+        valid: list[dict[str, Any]] = []
+        seen_stems: set[str] = set()
+        for raw in raw_questions:
+            question = self._validate_generated_question(
+                raw,
+                allowed_knowledge_ids=allowed_knowledge_ids,
+                question_family=question_family,
+                question_kind=question_kind,
+                source=source,
+                stage_id=str((stage_context or {}).get("stage_id") or ""),
+                difficulty_level=difficulty_level,
+            )
+            if question is None:
+                continue
+            stem_key = re.sub(r"\s+", "", str(question.get("stem") or ""))[:120]
+            if stem_key in seen_stems:
+                continue
+            seen_stems.add(stem_key)
+            valid.append(question)
+            if len(valid) >= limit:
+                break
+        if valid:
+            self.learning_store.record_generated_questions(
+                valid,
+                user_id=user_id,
+                stage_id=str((stage_context or {}).get("stage_id") or ""),
+                source=source,
+                question_kind=question_kind,
+            )
+        return valid, meta
+
+    def _validate_generated_question(
+        self,
+        raw: Any,
+        *,
+        allowed_knowledge_ids: list[str],
+        question_family: str,
+        question_kind: str,
+        source: str,
+        stage_id: str,
+        difficulty_level: int,
+    ) -> dict[str, Any] | None:
+        if not isinstance(raw, dict):
+            return None
+        knowledge_id = str(raw.get("knowledge_id") or "")
+        if knowledge_id not in set(allowed_knowledge_ids):
+            return None
+        stem = str(raw.get("stem") or "").strip()
+        answer = normalize_answer(str(raw.get("answer") or ""))
+        analysis = str(raw.get("analysis") or "").strip()
+        if not stem or not answer or not analysis:
+            return None
+        options = self._normalize_options(raw.get("options"))
+        if question_family == "choice":
+            labels = {item["label"] for item in options}
+            if len(options) < 4 or answer not in labels:
+                return None
+        question_id = str(raw.get("question_id") or f"gen_{uuid.uuid4().hex[:12]}")
+        return {
+            "question_id": question_id,
+            "knowledge_id": knowledge_id,
+            "stage_id": stage_id,
+            "question_kind": question_kind,
+            "source": source,
+            "question_type": str(raw.get("question_type") or ("閫夋嫨题" if question_family == "choice" else "解答题")),
+            "difficulty_level": max(1, min(int(raw.get("difficulty_level") or difficulty_level), 5)),
+            "stem": stem,
+            "stem_without_options": stem,
+            "options": options,
+            "is_choice": question_family == "choice",
+            "answer": answer,
+            "analysis": analysis,
+            "source_type": "generated",
+            "year": None,
+        }
+
+    def _normalize_options(self, options: Any) -> list[dict[str, str]]:
+        normalized: list[dict[str, str]] = []
+        if not isinstance(options, list):
+            return normalized
+        fallback_labels = ["A", "B", "C", "D", "E", "F"]
+        for index, option in enumerate(options[:6]):
+            if isinstance(option, dict):
+                label = str(option.get("label") or fallback_labels[index]).strip().upper()[:1]
+                content = str(option.get("content") or option.get("text") or "").strip()
+            else:
+                label = fallback_labels[index]
+                content = str(option).strip()
+            if label and content:
+                normalized.append({"label": label, "content": content})
+        return normalized
+
+    def _fallback_explanation(
+        self,
+        stage_context: dict[str, Any],
+        knowledge_detail: dict[str, Any] | None,
+        mode: str,
+        example_question: dict[str, Any],
+    ) -> str:
+        title = str(stage_context.get("title") or "当前关卡")
+        knowledge = (knowledge_detail or {}).get("knowledge") or {}
+        knowledge_name = knowledge.get("knowledge_name") or title
+        if mode == "example" and example_question:
+            return f"我们用例题来理解 {knowledge_name}：先识别题干中的关键条件，再把它翻译成对应公式。例题入口是：{example_question.get('stem', '')[:200]}。下一步先做一道基础题，再做一道同知识点变式。"
+        if mode == "visual":
+            return f"{knowledge_name} 可以先从图像直觉理解：关注函数走势、极限靠近方式或几何含义，再回到符号推导。下一步把图像变化和公式中的变量变化一一对应。"
+        if mode == "mistake_based":
+            reason = (stage_context.get("progress") or {}).get("last_reason") or "概念与变式稳定性不足"
+            return f"这次针对错因讲：你主要卡在 {reason}。先把定义条件补全，再检查公式适用范围，最后用一道变式题验证是否真正迁移。"
+        if mode == "analogy":
+            return f"把 {knowledge_name} 想成一道分拣流程：先判断题目属于哪类，再选择工具，最后检查条件是否满足。不要一上来套公式，先分型再计算。"
+        return f"{title} 的基础理解顺序是：先看定义，再看典型题入口，最后练习同知识点变式。掌握目标不是记住答案，而是能解释为什么这一步可以这样变形。"
 
     def create_pdf_payload(
         self,

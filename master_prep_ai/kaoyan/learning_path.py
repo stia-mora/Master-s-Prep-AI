@@ -9,7 +9,6 @@ from .content_store import KaoyanContentStore
 from .learning_store import DEFAULT_USER_ID, KaoyanLearningStore
 from .practice import KaoyanPracticeService
 
-
 DEFAULT_PASS_THRESHOLD = 90.0
 
 

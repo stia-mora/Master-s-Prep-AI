@@ -356,7 +356,9 @@ class TutorBotManager:
         from master_prep_ai.tutorbot.agent.loop import AgentLoop
         from master_prep_ai.tutorbot.bus.queue import MessageBus
         from master_prep_ai.tutorbot.config.schema import ExecToolConfig
-        from master_prep_ai.tutorbot.providers.master_prep_ai_adapter import create_master_prep_ai_provider
+        from master_prep_ai.tutorbot.providers.master_prep_ai_adapter import (
+            create_master_prep_ai_provider,
+        )
         from master_prep_ai.tutorbot.session.manager import SessionManager
 
         provider = create_master_prep_ai_provider()

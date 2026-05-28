@@ -29,7 +29,11 @@ from master_prep_ai.tutorbot.providers.base import LLMProvider
 from master_prep_ai.tutorbot.session.manager import Session, SessionManager
 
 if TYPE_CHECKING:
-    from master_prep_ai.tutorbot.config.schema import ChannelsConfig, ExecToolConfig, WebSearchConfig
+    from master_prep_ai.tutorbot.config.schema import (
+        ChannelsConfig,
+        ExecToolConfig,
+        WebSearchConfig,
+    )
     from master_prep_ai.tutorbot.cron.service import CronService
 
 

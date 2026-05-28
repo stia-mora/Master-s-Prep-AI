@@ -1,12 +1,13 @@
 "use client";
 
 import { useCallback, useEffect, useMemo, useState, type ChangeEvent, type FormEvent } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { BarChart3, BookOpenCheck, Brain, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Download, GraduationCap, Loader2, MessageCircleQuestion, PlayCircle, RefreshCw, RotateCcw, Sparkles, Target, Upload } from "lucide-react";
+import { BarChart3, BookOpenCheck, Brain, CheckCircle2, ChevronDown, ChevronRight, ClipboardList, Download, FileText, GraduationCap, Loader2, MessageCircleQuestion, PlayCircle, RefreshCw, RotateCcw, Sparkles, Target, Upload } from "lucide-react";
 import MarkdownRenderer from "@/components/common/MarkdownRenderer";
 import { useUnifiedChat } from "@/context/UnifiedChatContext";
-import { batchActionWrongQuestions, batchRetryWrongQuestions, createDiagnosticSession, createKaoyanChatContext, createPracticePdf, createPracticeSession, downloadPracticePdf as downloadPracticePdfBlob, generatePlan, getDashboardSummary, getDiagnosticReports, confirmDiagnosticReport, getKnowledgeDetail, getKnowledgeTree, getLearningPath, getReviewsToday, getTodayTasks, getWrongQuestions, getWrongQuestionSummary, initProfile, refreshLearningPath, retryWrongQuestion, startStage, submitDiagnostic, submitPractice, submitReview, submitStage, updateTaskStatus, updateWrongQuestionReason } from "@/lib/kaoyan-api";
-import type { ContentQuestion, DashboardSummary, DiagnosticReport, DiagnosticResult, KaoyanProfile, KnowledgeDetail, KnowledgeNode, LearningPath, LearningStage, PlanTask, PracticePdfPayload, PracticeResult, PracticeSession, ProfileDraft, ReviewItem, WrongQuestion, WrongQuestionSummary } from "@/lib/kaoyan-types";
+import { batchActionWrongQuestions, batchRetryWrongQuestions, createDiagnosticSession, createKaoyanChatContext, createPracticePdf, downloadPracticePdf as downloadPracticePdfBlob, explainLearningStageAgain, generatePlan, generatePractice, getDashboardSummary, getDiagnosticReports, getLearningPath, confirmDiagnosticReport, getKnowledgeDetail, getKnowledgeTree, getReviewsToday, getTodayTasks, getWrongQuestions, getWrongQuestionSummary, initProfile, refreshLearningPath, retryWrongQuestion, startLearningStage, submitDiagnostic, submitPractice, submitReview, updateTaskStatus, updateWrongQuestionReason } from "@/lib/kaoyan-api";
+import type { ContentQuestion, DashboardSummary, DiagnosticReport, DiagnosticResult, ExplainAgainMode, ExplanationVariant, KaoyanProfile, KnowledgeDetail, KnowledgeNode, LearningPath, LearningStage, PlanTask, PracticePdfPayload, PracticeResult, PracticeSession, PracticeSource, ProfileDraft, QuestionKind, ReviewItem, WrongQuestion, WrongQuestionSummary } from "@/lib/kaoyan-types";
 
 const DEFAULT_PROFILE: KaoyanProfile = { target_school: "", target_major: "", exam_date: "2026-12-20", daily_minutes: 180, target_score: 120, baseline_level: "待诊断", weak_modules: [] };
 const tabs = [
@@ -23,6 +24,15 @@ type DiagnosticMode = "light" | "deep";
 type ChatSourceType = "knowledge" | "question";
 type TaskProgressStatus = "idle" | "running" | "success" | "error";
 type TaskProgress = { status: TaskProgressStatus; label: string; stage: string; percent: number };
+type PracticeTabState = {
+  tabId: string;
+  label: string;
+  source: PracticeSource;
+  session: PracticeSession;
+  answers: Record<string, string>;
+  imageAnswers: Record<string, string>;
+  result: PracticeResult | null;
+};
 type WrongRetryMode = "original" | "variant" | "mixed";
 type WrongFilters = { status: string; sort: string; question_type: string; wrong_reason: string };
 const IDLE_TASK_PROGRESS: TaskProgress = { status: "idle", label: "", stage: "", percent: 0 };
@@ -33,23 +43,6 @@ function isSelectableKnowledge(item: KnowledgeNode): boolean { return ["section"
 function findFirstSelectable(nodes: KnowledgeNode[]): KnowledgeNode | undefined { return flattenKnowledge(nodes).find(isSelectableKnowledge); }
 function isChoiceQuestion(question: ContentQuestion): boolean { return Boolean(question.is_choice || question.options?.length || question.question_type.includes("选择")); }
 function splitTextList(value: string): string[] { return value.split(/[，,、\n]/).map((item) => item.trim()).filter(Boolean); }
-function formatLearningGateReason(summary: string): string {
-  const reasonLabels: Record<string, string> = {
-    recent_accuracy_low: "近期正确率偏低",
-    variant_stability_low: "变式题稳定性不足",
-    wrong_reason_still_active: "错因仍未完全解决",
-    review_retention_low: "复习保持率偏低",
-  };
-  if (!summary) return summary;
-  if (summary === "Mastery gate passed. Next stage is unlocked.") return "已达到过关标准，下一关卡已解锁。";
-  if (summary === "Mastery gate not passed: complete more stage practice for stronger evidence.") return "暂未达到过关标准：请完成更多关卡练习，以便系统获得更充分的判断依据。";
-  if (summary.startsWith("Mastery gate not passed: ")) {
-    const reasons = summary.replace("Mastery gate not passed: ", "").split(",").map((item) => item.trim()).filter(Boolean);
-    const translated = reasons.map((item) => reasonLabels[item] || item);
-    return `暂未达到过关标准：${translated.join("、")}`;
-  }
-  return summary;
-}
 function Metric({ label, value, sub }: { label: string; value: string; sub?: string }) { return <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><div className="text-xs text-[var(--muted-foreground)]">{label}</div><div className="mt-2 text-2xl font-semibold text-[var(--foreground)]">{value}</div>{sub ? <div className="mt-1 text-xs text-[var(--muted-foreground)]">{sub}</div> : null}</div>; }
 async function downloadPracticePdf(payload: PracticePdfPayload) {
   const blob = await downloadPracticePdfBlob({
@@ -75,7 +68,6 @@ export default function KaoyanPage() {
   const [activeTab, setActiveTab] = useState<TabId>("dashboard");
   const [profile, setProfile] = useState<KaoyanProfile>(DEFAULT_PROFILE);
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
-  const [learningPath, setLearningPath] = useState<LearningPath | null>(null);
   const [tasks, setTasks] = useState<PlanTask[]>([]);
   const [knowledgeTree, setKnowledgeTree] = useState<KnowledgeNode[]>([]);
   const [selectedKnowledgeId, setSelectedKnowledgeId] = useState("");
@@ -84,7 +76,12 @@ export default function KaoyanPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [imageAnswers, setImageAnswers] = useState<Record<string, string>>({});
   const [practiceResult, setPracticeResult] = useState<PracticeResult | null>(null);
+  const [practiceTabs, setPracticeTabs] = useState<PracticeTabState[]>([]);
+  const [activePracticeTabId, setActivePracticeTabId] = useState("");
   const [practicePdf, setPracticePdf] = useState<PracticePdfPayload | null>(null);
+  const [learningPath, setLearningPath] = useState<LearningPath | null>(null);
+  const [explainMode, setExplainMode] = useState<ExplainAgainMode>("basic");
+  const [explanationVariants, setExplanationVariants] = useState<ExplanationVariant[]>([]);
   const [diagnostic, setDiagnostic] = useState<PracticeSession | null>(null);
   const [diagnosticAnswers, setDiagnosticAnswers] = useState<Record<string, string>>({});
   const [diagnosticImages, setDiagnosticImages] = useState<Record<string, string>>({});
@@ -101,6 +98,10 @@ export default function KaoyanPage() {
   const [error, setError] = useState("");
   const [taskProgress, setTaskProgress] = useState<TaskProgress>(IDLE_TASK_PROGRESS);
   const flatKnowledge = useMemo(() => flattenKnowledge(knowledgeTree), [knowledgeTree]);
+  const activePracticeTab = useMemo(
+    () => practiceTabs.find((tab) => tab.tabId === activePracticeTabId) || practiceTabs[0] || null,
+    [activePracticeTabId, practiceTabs],
+  );
   const startTaskProgress = (label: string, stage: string, percent = 20) => setTaskProgress({ status: "running", label, stage, percent });
   const updateTaskProgress = (stage: string, percent: number) => setTaskProgress((prev) => ({ ...prev, status: "running", stage, percent }));
   const finishTaskProgress = (stage = "\u5df2\u5b8c\u6210") => setTaskProgress((prev) => ({ ...prev, status: "success", stage, percent: 100 }));
@@ -109,14 +110,14 @@ export default function KaoyanPage() {
     setError("");
     try {
       const reportsPromise = getDiagnosticReports().catch(() => ({ reports: [] as DiagnosticReport[] }));
-      const pathPromise = getLearningPath().catch(() => null);
+      const pathPromise = getLearningPath().catch(() => refreshLearningPath({ limit: 8 }));
       const wrongQuery = { status: wrongFilters.status || undefined, sort: wrongFilters.sort || undefined, question_type: wrongFilters.question_type || undefined, wrong_reason: wrongFilters.wrong_reason || undefined };
       const [tree, dashboard, today, wrong, wrongStats, reviewItems, reportItems, path] = await Promise.all([getKnowledgeTree(), getDashboardSummary(), getTodayTasks(), getWrongQuestions(wrongQuery), getWrongQuestionSummary().catch(() => null), getReviewsToday(), reportsPromise, pathPromise]);
       setKnowledgeTree(tree); setSummary(dashboard); setTasks(today); setWrongQuestions(wrong); setWrongSummary(wrongStats); setReviews(reviewItems); setDiagnosticReports(reportItems.reports || []); setLearningPath(path);
       setSelectedWrongIds((prev) => prev.filter((wrongId) => wrong.some((item) => item.wrong_id === wrongId)));
       if (dashboard.profile) setProfile({ ...DEFAULT_PROFILE, ...dashboard.profile });
       if (!selectedKnowledgeId) { const first = findFirstSelectable(tree); if (first) setSelectedKnowledgeId(first.knowledge_id); }
-    } catch (err) { setError(err instanceof Error ? err.message : "加载考研助手数据失败"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "??????????"); }
   }, [selectedKnowledgeId, wrongFilters]);
 
   useEffect(() => { void refresh(); }, [refresh]);
@@ -191,26 +192,34 @@ export default function KaoyanPage() {
   }
   async function handleTaskStatus(task: PlanTask, status: string) { setLoading(task.task_id); try { await updateTaskStatus(task.task_id, status); await refresh(); } catch (err) { setError(err instanceof Error ? err.message : "更新任务失败"); } finally { setLoading(null); } }
 
-  async function handleRefreshLearningPath() {
-    setLoading("learning-path-refresh"); setError("");
-    startTaskProgress("刷新学习路径", "正在汇总诊断、错题、练习和复习数据", 45);
-    try { const path = await refreshLearningPath(); setLearningPath(path); setNotice("学习路径已刷新"); finishTaskProgress("学习路径已更新"); await refresh(); }
-    catch (err) { failTaskProgress(); setError(err instanceof Error ? err.message : "刷新学习路径失败"); }
-    finally { setLoading(null); }
-  }
-
-  async function handleStartStage(stage: LearningStage) {
-    setLoading(`stage-${stage.stage_id}`); setError(""); setPracticeResult(null); setPracticePdf(null);
-    startTaskProgress("开始当前关卡", "正在生成关卡练习", 45);
-    try { const result = await startStage(stage.stage_id); setPractice(result.practice_session); setAnswers({}); setImageAnswers({}); setActiveTab("practice"); setNotice("关卡练习已生成，完成后会回写掌握度"); finishTaskProgress("关卡练习已就绪"); }
-    catch (err) { failTaskProgress(); setError(err instanceof Error ? err.message : "开始关卡失败"); }
-    finally { setLoading(null); }
-  }
-
   async function handleCreatePractice(type: "special" | "wrong_retry" = "special") {
     setLoading("practice"); setError(""); setPracticeResult(null); setPracticePdf(null);
-    try { const session = await createPracticeSession({ session_type: type, knowledge_id: type === "special" ? selectedKnowledgeId || undefined : undefined, question_family: "choice", limit: 5 }); setPractice(session); setAnswers({}); setImageAnswers({}); setActiveTab("practice"); }
+    try { const source: PracticeSource = type === "wrong_retry" ? "wrong_retry" : "knowledge"; const tabId = `${source}-${Date.now()}`; const session = await generatePractice({ source, knowledge_id: source === "knowledge" ? selectedKnowledgeId || undefined : undefined, question_family: "choice", question_kind: source === "wrong_retry" ? "variant" : "basic", tab_id: tabId, limit: 5 }); const nextTab: PracticeTabState = { tabId: session.tab_id || tabId, label: session.source_label || (source === "wrong_retry" ? "错题重刷" : "知识点新增题"), source, session, answers: {}, imageAnswers: {}, result: null }; setPracticeTabs((prev) => [...prev.filter((tab) => tab.tabId !== nextTab.tabId), nextTab]); setActivePracticeTabId(nextTab.tabId); setPractice(session); setAnswers({}); setImageAnswers({}); setActiveTab("practice"); }
     catch (err) { setError(err instanceof Error ? err.message : "创建练习失败"); }
+    finally { setLoading(null); }
+  }
+
+  async function handleStartStagePractice(stage: LearningStage, questionKind: QuestionKind = "basic") {
+    setLoading(`stage-${stage.stage_id}`); setError(""); setNotice("");
+    try {
+      await startLearningStage(stage.stage_id);
+      const tabId = `stage-${stage.stage_id}-${questionKind}-${Date.now()}`;
+      const session = await generatePractice({ source: "stage", stage_id: stage.stage_id, tab_id: tabId, question_kind: questionKind, question_family: "choice", limit: 5 });
+      const nextTab: PracticeTabState = { tabId: session.tab_id || tabId, label: session.source_label || `关卡练习 · ${stage.title}`, source: "stage", session, answers: {}, imageAnswers: {}, result: null };
+      setPracticeTabs((prev) => [...prev.filter((tab) => tab.tabId !== nextTab.tabId), nextTab]);
+      setActivePracticeTabId(nextTab.tabId);
+      setPractice(session); setAnswers({}); setImageAnswers({}); setActiveTab("practice");
+    } catch (err) { setError(err instanceof Error ? err.message : "启动关卡失败"); }
+    finally { setLoading(null); }
+  }
+
+  async function handleExplainAgain(stage: LearningStage) {
+    setLoading(`explain-${stage.stage_id}`); setError(""); setNotice("");
+    try {
+      const result = await explainLearningStageAgain(stage.stage_id, explainMode);
+      setExplanationVariants(result.history || [result.explanation_variant]);
+      setNotice("新的讲法已生成。");
+    } catch (err) { setError(err instanceof Error ? err.message : "生成换讲法失败"); }
     finally { setLoading(null); }
   }
 
@@ -243,19 +252,30 @@ export default function KaoyanPage() {
   }
 
   async function handleSubmitPractice() {
-    if (!practice) return; setLoading("submit-practice"); setError("");
+    const currentPractice = activePracticeTab?.session || practice;
+    const currentAnswers = activePracticeTab?.answers || answers;
+    const currentImageAnswers = activePracticeTab?.imageAnswers || imageAnswers;
+    if (!currentPractice) return; setLoading("submit-practice"); setError("");
     startTaskProgress("\u63d0\u4ea4\u7ec3\u4e60", "AI \u6b63\u5728\u5224\u5206\u548c\u5206\u6790\u9519\u56e0", 55);
-    try { updateTaskProgress("\u6b63\u5728\u5199\u5165\u9519\u9898\u4e0e\u590d\u4e60\u961f\u5217", 80); const answerPayload = practice.questions.map((question) => ({ question_id: question.question_id, answer: answers[question.question_id] || "", image_data_url: imageAnswers[question.question_id] })); const stageId = String((practice.ai_metadata || {}).stage_id || ""); const stageResult = stageId ? await submitStage(stageId, { practice_session_id: practice.session_id, answers: answerPayload }) : null; const result = stageResult?.practice_result || await submitPractice(practice.session_id, answerPayload); setPracticeResult(result); setNotice(stageResult ? `${stageResult.passed ? "关卡已通过" : "关卡未通过"}，当前掌握度 ${Math.round(stageResult.mastery_score)}` : result.ai_metadata?.message || "\u7ec3\u4e60\u5df2\u63d0\u4ea4\uff0c\u9519\u9898\u548c\u590d\u4e60\u961f\u5217\u5df2\u66f4\u65b0"); finishTaskProgress(stageResult ? "关卡掌握度已更新" : "\u7ec3\u4e60\u53cd\u9988\u5df2\u751f\u6210"); await refresh(); }
+    try { updateTaskProgress("\u6b63\u5728\u5199\u5165\u9519\u9898\u4e0e\u590d\u4e60\u961f\u5217", 80); const result = await submitPractice(currentPractice.session_id, currentPractice.questions.map((question) => ({ question_id: question.question_id, answer: currentAnswers[question.question_id] || "", image_data_url: currentImageAnswers[question.question_id] }))); setPracticeResult(result); if (activePracticeTab) setPracticeTabs((prev) => prev.map((tab) => tab.tabId === activePracticeTab.tabId ? { ...tab, result } : tab)); setNotice(result.ai_metadata?.message || "\u7ec3\u4e60\u5df2\u63d0\u4ea4\uff0c\u9519\u9898\u548c\u590d\u4e60\u961f\u5217\u5df2\u66f4\u65b0"); finishTaskProgress("\u7ec3\u4e60\u53cd\u9988\u5df2\u751f\u6210"); await refresh(); }
     catch (err) { failTaskProgress(); setError(err instanceof Error ? err.message : "Practice submit failed"); }
     finally { setLoading(null); }
   }
   function handleImageAnswer(questionId: string, event: ChangeEvent<HTMLInputElement>, target: "practice" | "diagnostic") {
     const file = event.target.files?.[0]; if (!file) return; const reader = new FileReader();
-    reader.onload = () => { const value = typeof reader.result === "string" ? reader.result : ""; if (target === "diagnostic") setDiagnosticImages((prev) => ({ ...prev, [questionId]: value })); else setImageAnswers((prev) => ({ ...prev, [questionId]: value })); };
+    reader.onload = () => { const value = typeof reader.result === "string" ? reader.result : ""; if (target === "diagnostic") setDiagnosticImages((prev) => ({ ...prev, [questionId]: value })); else { setImageAnswers((prev) => ({ ...prev, [questionId]: value })); if (activePracticeTab) setPracticeTabs((prev) => prev.map((tab) => tab.tabId === activePracticeTab.tabId ? { ...tab, imageAnswers: { ...tab.imageAnswers, [questionId]: value } } : tab)); } };
     reader.readAsDataURL(file);
   }
 
-  async function handleReview(review: ReviewItem, status: "reviewed" | "mastered" | "failed") { setLoading(review.review_id); try { await submitReview(review.review_id, status); await refresh(); } catch (err) { setError(err instanceof Error ? err.message : "提交复习结果失败"); } finally { setLoading(null); } }
+  async function handleReview(review: ReviewItem, status: "reviewed" | "mastered" | "failed") { setLoading(review.review_id); try { await submitReview(review.review_id, status); await refresh(); } catch (err) { setError(err instanceof Error ? err.message : "????????"); } finally { setLoading(null); } }
+
+  function openWrongRetryPractice(session: PracticeSession, label: string) {
+    const tabId = session.tab_id || `wrong-retry-${Date.now()}`;
+    const nextTab: PracticeTabState = { tabId, label: session.source_label || label, source: "wrong_retry", session, answers: {}, imageAnswers: {}, result: null };
+    setPracticeTabs((prev) => [...prev.filter((tab) => tab.tabId !== nextTab.tabId), nextTab]);
+    setActivePracticeTabId(nextTab.tabId);
+    setPractice(session); setAnswers({}); setImageAnswers({}); setActiveTab("practice");
+  }
 
   function handleToggleWrongSelection(wrongId: string) {
     setSelectedWrongIds((prev) => prev.includes(wrongId) ? prev.filter((item) => item !== wrongId) : [...prev, wrongId]);
@@ -269,45 +289,45 @@ export default function KaoyanPage() {
     setLoading(`wrong-retry-${wrongId}-${retryMode}`); setError(""); setPracticeResult(null); setPracticePdf(null);
     try {
       const session = await retryWrongQuestion(wrongId, { retry_mode: retryMode, limit: 1 });
-      setPractice(session); setAnswers({}); setImageAnswers({}); setActiveTab("practice");
-      setNotice(retryMode === "variant" ? "已生成同知识点同题型变式重刷。" : "已生成原题重刷。");
+      openWrongRetryPractice(session, retryMode === "variant" ? "??????" : "??????");
+      setNotice(retryMode === "variant" ? "???????????????" : "????????");
       await refresh();
-    } catch (err) { setError(err instanceof Error ? err.message : "生成错题重刷失败"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "????????"); }
     finally { setLoading(null); }
   }
 
   async function handleBatchWrongRetry(retryMode: WrongRetryMode) {
-    if (!selectedWrongIds.length) { setNotice("请先勾选要重刷的错题。"); return; }
+    if (!selectedWrongIds.length) { setNotice("???????????"); return; }
     setLoading(`wrong-batch-retry-${retryMode}`); setError(""); setPracticeResult(null); setPracticePdf(null);
     try {
       const session = await batchRetryWrongQuestions({ wrong_ids: selectedWrongIds, retry_mode: retryMode, limit: Math.max(1, selectedWrongIds.length * (retryMode === "mixed" ? 2 : 1)) });
-      setPractice(session); setAnswers({}); setImageAnswers({}); setActiveTab("practice");
-      setNotice("已按勾选错题生成重刷练习。");
+      openWrongRetryPractice(session, retryMode === "mixed" ? "??????" : retryMode === "variant" ? "??????" : "??????");
+      setNotice("?????????????");
       await refresh();
-    } catch (err) { setError(err instanceof Error ? err.message : "批量生成错题重刷失败"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "??????????"); }
     finally { setLoading(null); }
   }
 
   async function handleBatchWrongAction(action: "mark_focus" | "unmark_focus" | "add_to_review" | "export_selected") {
-    if (!selectedWrongIds.length) { setNotice("请先勾选要操作的错题。"); return; }
+    if (!selectedWrongIds.length) { setNotice("???????????"); return; }
     setLoading(`wrong-batch-${action}`); setError("");
     try {
       const result = await batchActionWrongQuestions({ wrong_ids: selectedWrongIds, action });
-      setNotice(`已处理 ${result.affected_count} 道错题。`);
+      setNotice(`??? ${result.affected_count} ????`);
       await refresh();
-    } catch (err) { setError(err instanceof Error ? err.message : "批量操作失败"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "??????"); }
     finally { setLoading(null); }
   }
 
   async function handleWrongReason(wrongId: string, wrongReason: string) {
     const reason = wrongReason.trim();
-    if (!reason) { setNotice("错因不能为空。"); return; }
+    if (!reason) { setNotice("???????"); return; }
     setLoading(`wrong-reason-${wrongId}`); setError("");
     try {
       await updateWrongQuestionReason(wrongId, { wrong_reason: reason, reason_source: "manual" });
-      setNotice("错因已更新。");
+      setNotice("??????");
       await refresh();
-    } catch (err) { setError(err instanceof Error ? err.message : "更新错因失败"); }
+    } catch (err) { setError(err instanceof Error ? err.message : "??????"); }
     finally { setLoading(null); }
   }
 
@@ -349,17 +369,17 @@ export default function KaoyanPage() {
   return (
     <div className="flex h-full flex-col overflow-hidden bg-[var(--background)]" translate="no">
       <header className="border-b border-[var(--border)] bg-[var(--card)] px-6 py-4">
-        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)]"><GraduationCap size={22} /></div><div><h1 className="text-xl font-semibold text-[var(--foreground)]">AI 考研助手</h1><p className="text-sm text-[var(--muted-foreground)]">高数 MVP：画像、诊断、计划、练习、错题、复习、反馈闭环</p></div></div><button onClick={() => void refresh()} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"><RefreshCw size={15} /> 刷新</button></div>
+        <div className="flex flex-wrap items-center justify-between gap-3"><div className="flex items-center gap-3"><div className="flex h-10 w-10 items-center justify-center rounded-lg bg-[var(--primary)] text-[var(--primary-foreground)]"><GraduationCap size={22} /></div><div><h1 className="text-xl font-semibold text-[var(--foreground)]">AI 考研助手</h1><p className="text-sm text-[var(--muted-foreground)]">高数 MVP：画像、诊断、计划、练习、错题、复习、反馈闭环</p></div></div><div className="flex flex-wrap items-center gap-2"><Link href="/kaoyan/paper-assembly" className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"><FileText size={15} /> 408 组卷</Link><button onClick={() => void refresh()} className="inline-flex items-center gap-2 rounded-lg border border-[var(--border)] px-3 py-2 text-sm text-[var(--foreground)] hover:bg-[var(--muted)]"><RefreshCw size={15} /> 刷新</button></div></div>
         <nav className="mt-4 flex flex-wrap gap-2">{tabs.map((tab) => { const Icon = tab.icon; const active = activeTab === tab.id; return <button key={tab.id} onClick={() => setActiveTab(tab.id)} className={`inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors ${active ? "bg-[var(--foreground)] text-[var(--background)]" : "text-[var(--muted-foreground)] hover:bg-[var(--muted)] hover:text-[var(--foreground)]"}`}><Icon size={15} /> {tab.label}</button>; })}</nav>
       </header>
       <main className="flex-1 overflow-y-auto px-6 py-5">
         {notice ? <div className="mb-4 rounded-lg border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-700 dark:text-emerald-300">{notice}</div> : null}
         {error ? <div className="mb-4 rounded-lg border border-[var(--destructive)]/30 bg-[var(--destructive)]/10 px-4 py-3 text-sm text-[var(--destructive)]">{error}</div> : null}
         <KaoyanTaskProgress progress={taskProgress} />
-        {activeTab === "dashboard" ? <div className="mb-5"><LearningPathPanel path={learningPath} loading={loading} onRefresh={() => void handleRefreshLearningPath()} onStart={(stage) => void handleStartStage(stage)} /></div> : null}
+        {activeTab === "dashboard" ? <LearningPathPanel path={learningPath} loading={loading} explainMode={explainMode} explanations={explanationVariants} onExplainMode={setExplainMode} onStart={(stage, kind) => void handleStartStagePractice(stage, kind)} onExplain={(stage) => void handleExplainAgain(stage)} /> : null}
         {activeTab === "dashboard" ? <div className="grid gap-5 xl:grid-cols-[420px_1fr]"><section className="space-y-4"><div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-5"><div className="mb-4 flex items-center gap-2 text-base font-semibold"><Target size={18} /> 学生画像</div><form onSubmit={handleProfileSubmit} className="space-y-3"><input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm" placeholder="目标院校" value={profile.target_school} onChange={(e) => setProfile({ ...profile, target_school: e.target.value })} /><input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm" placeholder="目标专业" value={profile.target_major} onChange={(e) => setProfile({ ...profile, target_major: e.target.value })} /><div className="grid grid-cols-2 gap-3"><label className="space-y-1 text-xs text-[var(--muted-foreground)]">考试日期<input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" type="date" value={profile.exam_date} onChange={(e) => setProfile({ ...profile, exam_date: e.target.value })} /></label><label className="space-y-1 text-xs text-[var(--muted-foreground)]">每日分钟<input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" type="number" min={30} value={profile.daily_minutes} onChange={(e) => setProfile({ ...profile, daily_minutes: Number(e.target.value) })} /></label></div><div className="grid grid-cols-2 gap-3"><label className="space-y-1 text-xs text-[var(--muted-foreground)]">目标分<input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" type="number" value={profile.target_score} onChange={(e) => setProfile({ ...profile, target_score: Number(e.target.value) })} /></label><label className="space-y-1 text-xs text-[var(--muted-foreground)]">基础水平<select className="w-full rounded-lg border bg-[var(--card)] px-3 py-2 text-sm text-[var(--foreground)]" value={profile.baseline_level} onChange={(e) => setProfile({ ...profile, baseline_level: e.target.value })}><option>待诊断</option><option>基础薄弱</option><option>基础</option><option>中等</option><option>强化</option><option>冲刺</option></select></label></div><input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm" placeholder="薄弱模块，可由诊断自动修正" value={profile.weak_modules.join("，")} onChange={(e) => setProfile({ ...profile, weak_modules: splitTextList(e.target.value) })} /><div className="flex gap-2"><button className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-sm font-medium text-[var(--primary-foreground)]" disabled={loading === "profile"}>{loading === "profile" ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} 保存画像</button><button type="button" onClick={() => void handleGeneratePlan()} className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium" disabled={loading === "plan"}>{loading === "plan" ? <Loader2 size={15} className="animate-spin" /> : <Brain size={15} />} 生成计划</button></div></form></div><DiagnosticPanel session={diagnostic} answers={diagnosticAnswers} imageAnswers={diagnosticImages} result={diagnosticResult} draft={profileDraft} loading={loading} onStart={(mode) => void handleStartDiagnostic(mode)} onAnswer={(questionId, answer) => setDiagnosticAnswers((prev) => ({ ...prev, [questionId]: answer }))} onImage={(questionId, event) => handleImageAnswer(questionId, event, "diagnostic")} onSubmit={() => void handleSubmitDiagnostic()} onDraftChange={setProfileDraft} onConfirm={() => void handleConfirmDiagnosticProfile()} /></section><section className="space-y-5"><div className="grid gap-3 md:grid-cols-4"><Metric label="任务完成率" value={pct(summary?.completion_rate)} sub={`${summary?.task_completed || 0}/${summary?.task_total || 0} 个任务`} /><Metric label="练习正确率" value={pct(summary?.accuracy)} sub={`${summary?.practice_sessions || 0} 次练习`} /><Metric label="待复习" value={`${summary?.review_due_count || 0}`} sub="错题、公式、易错卡" /><Metric label="平均掌握度" value={`${Math.round(summary?.mastery_average || 0)}`} sub="0-100" /></div><TaskPanel tasks={tasks} loading={loading} onStatus={handleTaskStatus} onPractice={() => void handleCreatePractice("special")} onStudy={handleTaskStudy} /></section></div> : null}
         {activeTab === "knowledge" ? <div className="grid gap-5 xl:grid-cols-[360px_1fr]"><section className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><div className="mb-3 font-semibold">高数知识树</div><div className="max-h-[68vh] overflow-y-auto pr-1"><KnowledgeTree nodes={knowledgeTree} selectedId={selectedKnowledgeId} onSelect={setSelectedKnowledgeId} /></div></section><KnowledgePanel detail={knowledgeDetail} loading={loading} onPractice={() => void handleCreatePractice("special")} onPracticePdf={(knowledgeId) => void handleCreatePracticePdf(knowledgeId)} onAskAI={(knowledgeId) => void handleAskAI("knowledge", knowledgeId, "explain")} /></div> : null}
-        {activeTab === "practice" ? <PracticePanel practice={practice} pdfPayload={practicePdf} answers={answers} imageAnswers={imageAnswers} result={practiceResult} loading={loading} onAnswer={(questionId, answer) => setAnswers((prev) => ({ ...prev, [questionId]: answer }))} onImage={(questionId, event) => handleImageAnswer(questionId, event, "practice")} onCreate={() => void handleCreatePractice("special")} onCreatePdf={() => void handleCreatePracticePdf()} onDownloadPdf={() => void handleDownloadPracticePdf()} onRetry={() => void handleCreatePractice("wrong_retry")} onSubmit={() => void handleSubmitPractice()} onAskAI={(questionId) => void handleAskAI("question", questionId, "solve")} /> : null}
+        {activeTab === "practice" ? <PracticePanel practice={activePracticeTab?.session || practice} practiceTabs={practiceTabs} activeTabId={activePracticeTab?.tabId || activePracticeTabId} onSelectTab={setActivePracticeTabId} pdfPayload={practicePdf} answers={activePracticeTab?.answers || answers} imageAnswers={activePracticeTab?.imageAnswers || imageAnswers} result={activePracticeTab?.result || practiceResult} loading={loading} onAnswer={(questionId, answer) => { setAnswers((prev) => ({ ...prev, [questionId]: answer })); if (activePracticeTab) setPracticeTabs((prev) => prev.map((tab) => tab.tabId === activePracticeTab.tabId ? { ...tab, answers: { ...tab.answers, [questionId]: answer } } : tab)); }} onImage={(questionId, event) => handleImageAnswer(questionId, event, "practice")} onCreate={() => void handleCreatePractice("special")} onCreatePdf={() => void handleCreatePracticePdf()} onDownloadPdf={() => void handleDownloadPracticePdf()} onRetry={() => void handleCreatePractice("wrong_retry")} onSubmit={() => void handleSubmitPractice()} onAskAI={(questionId) => void handleAskAI("question", questionId, "solve")} /> : null}
         {activeTab === "wrong" ? <WrongPanel wrongQuestions={wrongQuestions} summary={wrongSummary} filters={wrongFilters} selectedIds={selectedWrongIds} loading={loading} onFiltersChange={setWrongFilters} onToggle={handleToggleWrongSelection} onSelectAll={handleSelectAllWrong} onRetry={(wrongId, retryMode) => void handleWrongRetry(wrongId, retryMode)} onBatchRetry={(retryMode) => void handleBatchWrongRetry(retryMode)} onBatchAction={(action) => void handleBatchWrongAction(action)} onReason={(wrongId, reason) => void handleWrongReason(wrongId, reason)} onAskAI={(questionId) => void handleAskAI("question", questionId, "wrong_question_review")} /> : null}
         {activeTab === "reports" ? <ReportsPanel reports={diagnosticReports} loading={loading} onConfirm={(reportId) => void handleConfirmReport(reportId)} /> : null}
         {activeTab === "review" ? <ReviewPanel reviews={reviews} onReview={handleReview} /> : null}
@@ -373,14 +393,13 @@ function KaoyanTaskProgress({ progress }: { progress: TaskProgress }) {
   const width = `${Math.max(8, Math.min(100, progress.percent))}%`;
   return <div className="mb-4 rounded-lg border border-[var(--border)] bg-[var(--card)] px-4 py-3 text-sm"><div className="mb-2 flex items-center justify-between gap-3"><div className="font-medium text-[var(--foreground)]">{progress.label}</div><div className="text-xs text-[var(--muted-foreground)]">{progress.stage}</div></div><div className="h-1.5 overflow-hidden rounded-full bg-[var(--muted)]"><div className={`h-full rounded-full transition-all duration-300 ${tone} ${progress.status === "running" ? "animate-pulse" : ""}`} style={{ width }} /></div></div>;
 }
-
-function LearningPathPanel({ path, loading, onRefresh, onStart }: { path: LearningPath | null; loading: string | null; onRefresh: () => void; onStart: (stage: LearningStage) => void }) {
+function LearningPathPanel({ path, loading, explainMode, explanations, onExplainMode, onStart, onExplain }: { path: LearningPath | null; loading: string | null; explainMode: ExplainAgainMode; explanations: ExplanationVariant[]; onExplainMode: (mode: ExplainAgainMode) => void; onStart: (stage: LearningStage, kind: QuestionKind) => void; onExplain: (stage: LearningStage) => void }) {
   const current = path?.current_stage || path?.stages?.[0] || null;
-  const progress = current?.progress;
-  const score = Math.round(progress?.mastery_score || 0);
-  const reason = formatLearningGateReason(progress?.last_reason?.summary || "完成诊断或刷新路径后，系统会给出当前关卡与过关原因。");
-  return <section className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-5"><div className="flex flex-wrap items-start justify-between gap-4"><div className="min-w-0"><div className="text-xs font-medium uppercase text-[var(--muted-foreground)]">学习路径</div><h2 className="mt-1 text-xl font-semibold">{current?.title || "等待生成当前关卡"}</h2><p className="mt-2 max-w-3xl text-sm text-[var(--muted-foreground)]">{reason}</p></div><div className="flex flex-wrap gap-2"><button onClick={onRefresh} disabled={loading === "learning-path-refresh"} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm hover:bg-[var(--muted)]">{loading === "learning-path-refresh" ? <Loader2 size={15} className="animate-spin" /> : <RefreshCw size={15} />} 刷新路径</button>{current ? <button onClick={() => onStart(current)} disabled={loading === `stage-${current.stage_id}` || !progress?.unlocked} className="inline-flex items-center gap-2 rounded-lg bg-[var(--primary)] px-3 py-2 text-sm text-[var(--primary-foreground)] disabled:opacity-60">{loading === `stage-${current.stage_id}` ? <Loader2 size={15} className="animate-spin" /> : <PlayCircle size={15} />} 开始关卡</button> : null}</div></div><div className="mt-4 grid gap-3 md:grid-cols-[180px_1fr]"><div className="rounded-lg border border-[var(--border)] p-4"><div className="text-xs text-[var(--muted-foreground)]">当前掌握度</div><div className="mt-2 text-3xl font-semibold">{score}</div><div className="mt-2 h-2 overflow-hidden rounded-full bg-[var(--muted)]"><div className="h-full bg-[var(--primary)]" style={{ width: `${Math.min(100, score)}%` }} /></div></div><div className="grid gap-2 sm:grid-cols-3">{(path?.stages || []).slice(0, 6).map((stage) => { const state = stage.progress?.passed ? "已通过" : stage.progress?.unlocked ? "当前/已解锁" : "未解锁"; return <div key={stage.stage_id} className="rounded-lg border border-[var(--border)] px-3 py-2 text-sm"><div className="truncate font-medium">{stage.title}</div><div className="mt-1 text-xs text-[var(--muted-foreground)]">{state} · {Math.round(stage.progress?.mastery_score || 0)}</div></div>; })}</div></div></section>;
+  if (!path || !current) return <section className="mb-5 rounded-lg border border-[var(--border)] bg-[var(--card)] p-5"><Empty text="学习路径尚未生成。保存画像或刷新后会自动创建演示关卡。" /></section>;
+  const score = Math.round(current.progress?.mastery_score || 0);
+  return <section className="mb-5 rounded-lg border border-[var(--border)] bg-[var(--card)] p-5"><div className="mb-4 flex flex-wrap items-start justify-between gap-3"><div><div className="text-xs text-[var(--muted-foreground)]">当前关卡</div><h2 className="text-lg font-semibold">{current.title}</h2><div className="mt-1 text-sm text-[var(--muted-foreground)]">掌握度 {score}/{current.pass_threshold} · {current.progress?.last_reason || "开始本关后记录进度"}</div></div><div className="flex flex-wrap gap-2"><button onClick={() => onStart(current, "basic")} disabled={loading?.startsWith("stage-")} className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm text-[var(--primary-foreground)]">基础题</button><button onClick={() => onStart(current, "variant")} disabled={loading?.startsWith("stage-")} className="rounded-lg border px-3 py-2 text-sm">变式题</button><button onClick={() => onStart(current, "challenge")} disabled={loading?.startsWith("stage-")} className="rounded-lg border px-3 py-2 text-sm">挑战题</button></div></div><div className="grid gap-3 lg:grid-cols-[1fr_280px]"><div className="space-y-2">{path.stages.slice(0, 8).map((stage) => <div key={stage.stage_id} className={`rounded-md border px-3 py-2 text-sm ${stage.stage_id === current.stage_id ? "border-[var(--foreground)]" : "border-[var(--border)]"}`}><div className="flex items-center justify-between gap-2"><span className="font-medium">{stage.order_index + 1}. {stage.title}</span><span className="text-xs text-[var(--muted-foreground)]">{stage.progress?.unlocked ? stage.progress?.passed ? "已通过" : "已解锁" : "未解锁"} · {Math.round(stage.progress?.mastery_score || 0)}</span></div></div>)}</div><div className="rounded-md border border-[var(--border)] p-3"><div className="mb-2 text-sm font-medium">换一种讲法</div><select value={explainMode} onChange={(event) => onExplainMode(event.target.value as ExplainAgainMode)} className="mb-2 w-full rounded-md border bg-[var(--card)] px-2 py-2 text-sm"><option value="basic">从基础讲</option><option value="example">举例讲</option><option value="visual">图像直觉讲</option><option value="mistake_based">针对错因讲</option><option value="analogy">类比讲</option></select><button onClick={() => onExplain(current)} disabled={loading === `explain-${current.stage_id}`} className="w-full rounded-md bg-[var(--foreground)] px-3 py-2 text-sm text-[var(--background)]">生成讲法</button>{explanations.length ? <MarkdownRenderer content={explanations[0].content} variant="compact" /> : null}</div></div></section>;
 }
+
 function DiagnosticPanel({ session, answers, imageAnswers, result, draft, loading, onStart, onAnswer, onImage, onSubmit, onDraftChange, onConfirm }: { session: PracticeSession | null; answers: Record<string, string>; imageAnswers: Record<string, string>; result: DiagnosticResult | null; draft: ProfileDraft | null; loading: string | null; onStart: (mode: DiagnosticMode) => void; onAnswer: (questionId: string, answer: string) => void; onImage: (questionId: string, event: ChangeEvent<HTMLInputElement>) => void; onSubmit: () => void; onDraftChange: (draft: ProfileDraft) => void; onConfirm: () => void }) {
   return <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-5"><div className="mb-4"><div className="flex items-center gap-2 font-semibold"><Sparkles size={17} /> 入门诊断</div><p className="mt-1 text-xs text-[var(--muted-foreground)]">诊断题会留在画像区域内完成，用于生成画像草案和计划种子。</p></div>{!session ? <div className="grid grid-cols-2 gap-2"><button type="button" onClick={() => onStart("light")} className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium" disabled={loading === "diagnostic-light"}>{loading === "diagnostic-light" ? <Loader2 size={15} className="animate-spin" /> : <Brain size={15} />} 5 分钟轻诊断</button><button type="button" onClick={() => onStart("deep")} className="inline-flex items-center justify-center gap-2 rounded-lg border px-3 py-2 text-sm font-medium" disabled={loading === "diagnostic-deep"}>{loading === "diagnostic-deep" ? <Loader2 size={15} className="animate-spin" /> : <Brain size={15} />} 30 分钟深诊断</button></div> : null}{session && !result ? <div className="space-y-4"><div className="rounded-lg bg-[var(--muted)] px-3 py-2 text-sm font-medium">{session.title}</div>{session.questions.map((question, index) => <QuestionAnswer key={question.question_id} question={question} index={index} answer={answers[question.question_id] || ""} imageAnswer={imageAnswers[question.question_id]} onAnswer={(answer) => onAnswer(question.question_id, answer)} onImage={(event) => onImage(question.question_id, event)} />)}<button onClick={onSubmit} disabled={loading === "submit-diagnostic"} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--foreground)] px-4 py-2 text-sm text-[var(--background)]">{loading === "submit-diagnostic" ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} 提交诊断并生成画像草案</button></div> : null}{draft ? <div className="mt-4 space-y-4 rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4"><div className="font-semibold">画像草案</div>{result?.summary ? <p className="text-sm text-[var(--muted-foreground)]">{result.summary}</p> : null}<div className="grid gap-3 md:grid-cols-2"><label className="space-y-1 text-xs text-[var(--muted-foreground)]">基础等级<input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" value={draft.baseline_level} onChange={(e) => onDraftChange({ ...draft, baseline_level: e.target.value })} /></label><label className="space-y-1 text-xs text-[var(--muted-foreground)]">建议每日分钟<input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" type="number" value={draft.recommended_daily_minutes} onChange={(e) => onDraftChange({ ...draft, recommended_daily_minutes: Number(e.target.value) })} /></label></div><label className="block space-y-1 text-xs text-[var(--muted-foreground)]">薄弱模块<input className="w-full rounded-lg border bg-transparent px-3 py-2 text-sm text-[var(--foreground)]" value={draft.weak_modules.join("，")} onChange={(e) => onDraftChange({ ...draft, weak_modules: splitTextList(e.target.value) })} /></label><DraftTags title="优势" items={draft.strengths} /><DraftTags title="风险" items={draft.risk_flags} /><DraftTags title="计划重点" items={draft.plan_focus} /><div className="grid gap-2 md:grid-cols-2">{Object.entries(draft.module_scores || {}).map(([name, score]) => <div key={name} className="rounded-md border border-[var(--border)] px-3 py-2 text-sm"><span className="text-[var(--muted-foreground)]">{name}</span><span className="float-right font-semibold">{score}</span></div>)}</div><MarkdownRenderer content={draft.reasoning_summary || "暂无诊断理由"} variant="compact" /><button onClick={onConfirm} disabled={loading === "confirm-diagnostic"} className="inline-flex w-full items-center justify-center gap-2 rounded-lg bg-[var(--primary)] px-4 py-2 text-sm text-[var(--primary-foreground)]">{loading === "confirm-diagnostic" ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} 确认画像并生成计划</button></div> : null}</div>;
 }
@@ -405,7 +424,7 @@ function KnowledgePanel({ detail, loading, onPractice, onPracticePdf, onAskAI }:
 function QuestionPreview({ question, index, onAskAI }: { question: ContentQuestion; index: number; onAskAI: () => void }) { return <div className="rounded-md border border-[var(--border)]/70 p-3"><div className="mb-2 flex items-center justify-between gap-2 text-sm text-[var(--muted-foreground)]"><span>样题 {index + 1} · {question.question_type}</span><button onClick={onAskAI} className="rounded-md border px-2 py-1 text-xs">AI解析知识点</button></div><MarkdownRenderer content={question.stem_without_options || question.stem} variant="compact" /></div>; }
 function InfoList({ title, items }: { title: string; items: string[] }) { return <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-4"><h3 className="mb-3 font-semibold">{title}</h3>{items.length ? <div className="space-y-3">{items.slice(0, 5).map((item, index) => <MarkdownRenderer key={index} content={item} variant="compact" />)}</div> : <div className="text-sm text-[var(--muted-foreground)]">暂无内容</div>}</div>; }
 
-function PracticePanel({ practice, pdfPayload, answers, imageAnswers, result, loading, onAnswer, onImage, onCreate, onCreatePdf, onDownloadPdf, onRetry, onSubmit, onAskAI }: { practice: PracticeSession | null; pdfPayload: PracticePdfPayload | null; answers: Record<string, string>; imageAnswers: Record<string, string>; result: PracticeResult | null; loading: string | null; onAnswer: (questionId: string, answer: string) => void; onImage: (questionId: string, event: ChangeEvent<HTMLInputElement>) => void; onCreate: () => void; onCreatePdf: () => void; onDownloadPdf: () => void; onRetry: () => void; onSubmit: () => void; onAskAI: (questionId: string) => void }) { return <section className="space-y-4"><div className="flex flex-wrap gap-2"><button onClick={onCreate} className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm text-[var(--primary-foreground)]">新建选择题练习</button><button onClick={onCreatePdf} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm" disabled={loading === "practice-pdf"}>{loading === "practice-pdf" ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} 填空/综合题 PDF</button><button onClick={onRetry} className="rounded-lg border px-3 py-2 text-sm">错题二刷</button></div>{pdfPayload ? <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4"><div className="font-medium">{pdfPayload.title}</div><div className="mt-1 text-sm text-[var(--muted-foreground)]">已筛选 {pdfPayload.questions.length} 道填空/综合题，适合下载后线下练习。</div><button onClick={onDownloadPdf} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[var(--foreground)] px-3 py-2 text-sm text-[var(--background)]"><Download size={15} /> 下载 PDF</button></div> : null}{!practice ? <Empty text="线上练习只提供选择题；填空题和综合题请生成 PDF 下载后线下完成。" /> : <div className="space-y-4"><h2 className="text-lg font-semibold">{practice.title}</h2>{practice.questions.filter(isChoiceQuestion).map((question, index) => <QuestionAnswer key={question.question_id} question={question} index={index} answer={answers[question.question_id] || ""} imageAnswer={imageAnswers[question.question_id]} onAnswer={(answer) => onAnswer(question.question_id, answer)} onImage={(event) => onImage(question.question_id, event)} onAskAI={() => onAskAI(question.question_id)} loading={loading} />)}<button onClick={onSubmit} disabled={loading === "submit-practice"} className="inline-flex items-center gap-2 rounded-lg bg-[var(--foreground)] px-4 py-2 text-sm text-[var(--background)]">{loading === "submit-practice" ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} 提交练习</button></div>}{result ? <PracticeResultPanel result={result} /> : null}</section>; }
+function PracticePanel({ practice, practiceTabs, activeTabId, onSelectTab, pdfPayload, answers, imageAnswers, result, loading, onAnswer, onImage, onCreate, onCreatePdf, onDownloadPdf, onRetry, onSubmit, onAskAI }: { practice: PracticeSession | null; practiceTabs: PracticeTabState[]; activeTabId: string; onSelectTab: (tabId: string) => void; pdfPayload: PracticePdfPayload | null; answers: Record<string, string>; imageAnswers: Record<string, string>; result: PracticeResult | null; loading: string | null; onAnswer: (questionId: string, answer: string) => void; onImage: (questionId: string, event: ChangeEvent<HTMLInputElement>) => void; onCreate: () => void; onCreatePdf: () => void; onDownloadPdf: () => void; onRetry: () => void; onSubmit: () => void; onAskAI: (questionId: string) => void }) { return <section className="space-y-4"><div className="flex flex-wrap gap-2"><button onClick={onCreate} className="rounded-lg bg-[var(--primary)] px-3 py-2 text-sm text-[var(--primary-foreground)]">新建选择题练习</button><button onClick={onCreatePdf} className="inline-flex items-center gap-2 rounded-lg border px-3 py-2 text-sm" disabled={loading === "practice-pdf"}>{loading === "practice-pdf" ? <Loader2 size={15} className="animate-spin" /> : <Download size={15} />} 填空/综合题 PDF</button><button onClick={onRetry} className="rounded-lg border px-3 py-2 text-sm">错题二刷</button></div>{practiceTabs.length ? <div className="flex flex-wrap gap-2">{practiceTabs.map((tab) => <button key={tab.tabId} onClick={() => onSelectTab(tab.tabId)} className={`rounded-lg border px-3 py-2 text-sm ${tab.tabId === activeTabId ? "bg-[var(--foreground)] text-[var(--background)]" : "hover:bg-[var(--muted)]"}`}>{tab.label}</button>)}</div> : null}{pdfPayload ? <div className="rounded-lg border border-emerald-500/30 bg-emerald-500/5 p-4"><div className="font-medium">{pdfPayload.title}</div><div className="mt-1 text-sm text-[var(--muted-foreground)]">已筛选 {pdfPayload.questions.length} 道填空/综合题，适合下载后线下练习。</div><button onClick={onDownloadPdf} className="mt-3 inline-flex items-center gap-2 rounded-lg bg-[var(--foreground)] px-3 py-2 text-sm text-[var(--background)]"><Download size={15} /> 下载 PDF</button></div> : null}{!practice ? <Empty text="线上练习只提供选择题；填空题和综合题请生成 PDF 下载后线下完成。" /> : <div className="space-y-4"><h2 className="text-lg font-semibold">{practice.title}</h2>{practice.questions.filter(isChoiceQuestion).map((question, index) => <QuestionAnswer key={question.question_id} question={question} index={index} answer={answers[question.question_id] || ""} imageAnswer={imageAnswers[question.question_id]} onAnswer={(answer) => onAnswer(question.question_id, answer)} onImage={(event) => onImage(question.question_id, event)} onAskAI={() => onAskAI(question.question_id)} loading={loading} />)}<button onClick={onSubmit} disabled={loading === "submit-practice"} className="inline-flex items-center gap-2 rounded-lg bg-[var(--foreground)] px-4 py-2 text-sm text-[var(--background)]">{loading === "submit-practice" ? <Loader2 size={15} className="animate-spin" /> : <CheckCircle2 size={15} />} 提交练习</button></div>}{result ? <PracticeResultPanel result={result} /> : null}</section>; }
 function PracticeResultPanel({ result }: { result: PracticeResult }) { return <div className="rounded-lg border border-[var(--border)] bg-[var(--card)] p-5"><h3 className="text-lg font-semibold">练习反馈：{result.correct_count}/{result.total_count}</h3><p className="mt-2 text-sm text-[var(--muted-foreground)]">正确率 {pct(result.accuracy)}</p><MarkdownRenderer content={result.analysis_summary} variant="compact" /><div className="mt-3 space-y-2">{result.answers.map((item) => <div key={item.question_id} className="rounded-md border border-[var(--border)]/70 p-3 text-sm"><div className={item.is_correct ? "text-emerald-600" : "text-[var(--destructive)]"}>{item.question_id} · {item.is_correct ? "正确" : "错误"} · {item.error_reason} · {item.grading_method || "graded"}</div><MarkdownRenderer content={item.ai_analysis} variant="compact" /></div>)}</div></div>; }
 function WrongPanel({ wrongQuestions, summary, filters, selectedIds, loading, onFiltersChange, onToggle, onSelectAll, onRetry, onBatchRetry, onBatchAction, onReason, onAskAI }: { wrongQuestions: WrongQuestion[]; summary: WrongQuestionSummary | null; filters: WrongFilters; selectedIds: string[]; loading: string | null; onFiltersChange: (filters: WrongFilters) => void; onToggle: (wrongId: string) => void; onSelectAll: (checked: boolean) => void; onRetry: (wrongId: string, retryMode: "original" | "variant") => void; onBatchRetry: (retryMode: WrongRetryMode) => void; onBatchAction: (action: "mark_focus" | "unmark_focus" | "add_to_review" | "export_selected") => void; onReason: (wrongId: string, reason: string) => void; onAskAI: (questionId: string) => void }) {
   const allSelected = wrongQuestions.length > 0 && wrongQuestions.every((item) => selectedIds.includes(item.wrong_id));

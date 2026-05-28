@@ -94,33 +94,36 @@ test("practice helpers route choice sessions and free-response pdf payloads", as
   assert.equal(blob.size > 0, true);
 });
 
-test("learning path helpers use the expected endpoints", async () => {
+test("stage learning path and generated practice helpers use role C endpoints", async () => {
   const api = await loadKaoyanApi();
-  mockFetch({ path_id: "path_1", stages: [] });
+  mockFetch({ path_id: "path_1", stages: [], current_stage: null });
 
   await api.getLearningPath();
   assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/learning-path");
 
-  await api.refreshLearningPath();
+  await api.refreshLearningPath({ limit: 8 });
   assert.equal(fetchCalls[1].url, "/api/v1/kaoyan/learning-path/refresh");
   assert.equal(fetchCalls[1].init?.method, "POST");
+  assert.equal(fetchCalls[1].init?.body, JSON.stringify({ limit: 8 }));
 
-  mockFetch({ practice_session: { session_id: "prac_1" } });
-  await api.startStage("stage_1");
+  mockFetch({ stage_id: "stage_1" });
+  await api.startLearningStage("stage_1");
   assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/learning-path/stages/stage_1/start");
   assert.equal(fetchCalls[0].init?.method, "POST");
 
-  mockFetch({ stage_id: "stage_1", mastery_score: 91, passed: true });
-  await api.submitStage("stage_1", {
-    practice_session_id: "prac_1",
-    answers: [{ question_id: "q1", answer: "A" }],
-  });
-  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/learning-path/stages/stage_1/submit");
+  mockFetch({ session_id: "prac_stage", questions: [] });
+  await api.generatePractice({ source: "stage", stage_id: "stage_1", question_kind: "challenge", tab_id: "tab_1" });
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/practice/generate");
   assert.equal(fetchCalls[0].init?.method, "POST");
   assert.equal(
     fetchCalls[0].init?.body,
-    JSON.stringify({ practice_session_id: "prac_1", answers: [{ question_id: "q1", answer: "A" }] }),
+    JSON.stringify({ source: "stage", stage_id: "stage_1", question_kind: "challenge", tab_id: "tab_1" }),
   );
+
+  mockFetch({ explanation_variant: { mode: "example", content: "demo" }, history: [] });
+  await api.explainLearningStageAgain("stage_1", "example");
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/learning-path/stages/stage_1/explain-again");
+  assert.equal(fetchCalls[0].init?.body, JSON.stringify({ mode: "example" }));
 });
 
 test("dashboard summary returns compatible optional member A fields", async () => {

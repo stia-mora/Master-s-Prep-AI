@@ -15,7 +15,10 @@ from typing import Any
 from master_prep_ai.auth import current_user_context, get_current_user_id
 from master_prep_ai.core.stream import StreamEvent, StreamEventType
 from master_prep_ai.services.path_service import get_path_service
-from master_prep_ai.services.session.sqlite_store import SQLiteSessionStore, get_sqlite_session_store
+from master_prep_ai.services.session.sqlite_store import (
+    SQLiteSessionStore,
+    get_sqlite_session_store,
+)
 
 logger = logging.getLogger(__name__)
 

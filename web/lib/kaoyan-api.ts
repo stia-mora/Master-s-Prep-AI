@@ -3,8 +3,9 @@ import type {
   DashboardSummary,
   DiagnosticResult,
   DiagnosticReport,
+  ExplainAgainMode,
+  ExplainAgainResult,
   KaoyanChatContext,
-  LearningPath,
   RagQueryResult,
   PlanReorderResult,
   MaterialParseTask,
@@ -14,18 +15,20 @@ import type {
   KaoyanProfile,
   KnowledgeDetail,
   KnowledgeNode,
+  LearningPath,
   PlanTask,
   PracticePdfPayload,
   PracticePdfRequest,
   PracticeResult,
   PracticeSession,
+  PracticeSource,
+  QuestionKind,
   ReviewItem,
-  StageStartResult,
-  StageSubmitResult,
   StudyPlan,
   WrongQuestion,
   WrongQuestionSummary,
 } from "./kaoyan-types";
+
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(apiUrl(path), {
@@ -90,27 +93,26 @@ export function getLearningPath(): Promise<LearningPath> {
   return request<LearningPath>("/api/v1/kaoyan/learning-path");
 }
 
-export function refreshLearningPath(): Promise<LearningPath> {
-  return request<LearningPath>("/api/v1/kaoyan/learning-path/refresh", { method: "POST" });
+export function refreshLearningPath(input: { goal?: string; limit?: number } = {}): Promise<LearningPath> {
+  return request<LearningPath>("/api/v1/kaoyan/learning-path/refresh", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
-export function startStage(stageId: string): Promise<StageStartResult> {
-  return request<StageStartResult>(`/api/v1/kaoyan/learning-path/stages/${stageId}/start`, {
+export function startLearningStage(stageId: string): Promise<import("./kaoyan-types").LearningStage> {
+  return request<import("./kaoyan-types").LearningStage>(`/api/v1/kaoyan/learning-path/stages/${stageId}/start`, {
     method: "POST",
   });
 }
 
-export function submitStage(
+export function explainLearningStageAgain(
   stageId: string,
-  input: {
-    practice_session_id?: string;
-    session_id?: string;
-    answers?: Array<{ question_id: string; answer: string; image_data_url?: string }>;
-  } = {},
-): Promise<StageSubmitResult> {
-  return request<StageSubmitResult>(`/api/v1/kaoyan/learning-path/stages/${stageId}/submit`, {
+  mode: ExplainAgainMode,
+): Promise<ExplainAgainResult> {
+  return request<ExplainAgainResult>(`/api/v1/kaoyan/learning-path/stages/${stageId}/explain-again`, {
     method: "POST",
-    body: JSON.stringify(input),
+    body: JSON.stringify({ mode }),
   });
 }
 
@@ -176,8 +178,32 @@ export function createPracticeSession(input: {
   question_family?: "choice" | "free_response";
   difficulty_level?: number;
   limit?: number;
+  source?: PracticeSource;
+  source_label?: string;
+  origin_id?: string;
+  stage_id?: string;
+  tab_id?: string;
 }): Promise<PracticeSession> {
   return request<PracticeSession>("/api/v1/kaoyan/practice/session", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function generatePractice(input: {
+  source?: PracticeSource;
+  stage_id?: string;
+  origin_id?: string;
+  tab_id?: string;
+  knowledge_id?: string;
+  source_question_id?: string;
+  question_type?: string;
+  question_family?: "choice" | "free_response";
+  question_kind?: QuestionKind;
+  difficulty_level?: number;
+  limit?: number;
+}): Promise<PracticeSession> {
+  return request<PracticeSession>("/api/v1/kaoyan/practice/generate", {
     method: "POST",
     body: JSON.stringify(input),
   });

@@ -132,38 +132,44 @@ export interface PracticeSession {
   knowledge_id: string;
   question_ids: string[];
   questions: ContentQuestion[];
+  source?: PracticeSource;
+  source_label?: string;
+  origin_id?: string;
+  stage_id?: string;
+  tab_id?: string;
   ai_metadata?: Record<string, unknown>;
 }
 
+export type QuestionFamily = "choice" | "free_response";
+export type PracticeSource = "stage" | "wrong_retry" | "knowledge" | "diagnostic";
+export type QuestionKind = "basic" | "variant" | "challenge";
+export type ExplainAgainMode = "basic" | "example" | "visual" | "mistake_based" | "analogy";
+
 export interface StageProgress {
-  user_id: string;
-  stage_id: string;
+  progress_id?: string;
+  user_id?: string;
+  stage_id?: string;
   mastery_score: number;
   passed: boolean;
   unlocked: boolean;
   attempt_count: number;
-  last_reason: {
-    summary?: string;
-    blockers?: string[];
-    metrics?: Record<string, number>;
-    threshold?: number;
-  };
-  next_action: string;
-  evidence: Array<Record<string, unknown>>;
+  last_reason: string;
+  next_action?: string;
+  evidence?: Array<Record<string, unknown>>;
   updated_at?: string;
 }
 
 export interface LearningStage {
-  id: string;
+  id?: string;
   stage_id: string;
   path_id: string;
-  user_id: string;
+  user_id?: string;
   knowledge_ids: string[];
   title: string;
   order_index: number;
-  unlock_rule: Record<string, unknown>;
+  unlock_rule?: Record<string, unknown>;
   pass_threshold: number;
-  context: {
+  context?: {
     stage_context?: Record<string, unknown>;
     weakness_tags?: string[];
     portrait_summary?: Record<string, unknown>;
@@ -174,14 +180,14 @@ export interface LearningStage {
 }
 
 export interface LearningPath {
-  id: string;
+  id?: string;
   path_id: string;
   user_id: string;
   status: string;
   goal: string;
-  source_snapshot_id: string;
-  portrait_summary: Record<string, unknown>;
-  evidence: Array<Record<string, unknown>>;
+  source_snapshot_id?: string;
+  portrait_summary?: Record<string, unknown>;
+  evidence?: Array<Record<string, unknown>>;
   stages: LearningStage[];
   current_stage?: LearningStage | null;
   unlocked_stages?: LearningStage[];
@@ -205,7 +211,22 @@ export interface StageSubmitResult {
   practice_result?: PracticeResult | null;
 }
 
-export type QuestionFamily = "choice" | "free_response";
+export interface ExplanationVariant {
+  variant_id: string;
+  stage_id: string;
+  mode: ExplainAgainMode;
+  content: string;
+  example_question?: ContentQuestion | Record<string, unknown>;
+  helpful?: boolean | null;
+  created_at: string;
+  ai_metadata?: { ai_used?: boolean; status?: string; message?: string };
+}
+
+export interface ExplainAgainResult {
+  stage_context: LearningStage;
+  explanation_variant: ExplanationVariant;
+  history: ExplanationVariant[];
+}
 
 export interface PracticePdfRequest {
   session_type?: "special" | "wrong_retry" | "similar";

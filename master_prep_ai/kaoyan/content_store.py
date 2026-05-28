@@ -8,8 +8,8 @@ import os
 from pathlib import Path
 import re
 import sqlite3
-import uuid
 from typing import Any
+import uuid
 
 DEFAULT_USER_ID = "local-user"
 _MATERIAL_PARSE_TASKS: dict[str, dict[str, Any]] = {}
@@ -41,6 +41,8 @@ def _resolve_content_db_path(path: str | Path) -> Path:
         return candidate
     if candidate.parts and candidate.parts[0] == "data":
         return _repo_root() / candidate
+    if candidate.exists():
+        return candidate
     return _repo_root() / "data" / candidate
 
 
@@ -293,10 +295,10 @@ class KaoyanContentStore:
         if question_type:
             clauses.append("question_type = ?")
             params.append(question_type)
-        if question_family == "choice":
+        if False and question_family == "choice":
             clauses.append("question_type LIKE ?")
             params.append("%选择%")
-        elif question_family == "free_response":
+        elif False and question_family == "free_response":
             clauses.append("question_type NOT LIKE ?")
             params.append("%选择%")
         if difficulty_level:
