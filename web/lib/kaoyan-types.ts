@@ -120,6 +120,9 @@ export interface DashboardSummary {
   weak_knowledge_ids?: string[];
   recent_diagnostic_report?: DiagnosticReport | null;
   active_plan?: Omit<StudyPlan, "tasks"> | null;
+  portrait_summary?: Record<string, unknown>;
+  current_stage?: LearningStage | null;
+  learning_path_status?: string;
 }
 
 export interface PracticeSession {
@@ -151,29 +154,61 @@ export interface StageProgress {
   unlocked: boolean;
   attempt_count: number;
   last_reason: string;
+  next_action?: string;
+  evidence?: Array<Record<string, unknown>>;
   updated_at?: string;
 }
 
 export interface LearningStage {
+  id?: string;
   stage_id: string;
   path_id: string;
+  user_id?: string;
   knowledge_ids: string[];
   title: string;
   order_index: number;
   unlock_rule?: Record<string, unknown>;
   pass_threshold: number;
+  context?: {
+    stage_context?: Record<string, unknown>;
+    weakness_tags?: string[];
+    portrait_summary?: Record<string, unknown>;
+  };
   progress: StageProgress;
+  created_at?: string;
+  updated_at?: string;
 }
 
 export interface LearningPath {
+  id?: string;
   path_id: string;
   user_id: string;
   status: string;
   goal: string;
   source_snapshot_id?: string;
+  portrait_summary?: Record<string, unknown>;
+  evidence?: Array<Record<string, unknown>>;
   stages: LearningStage[];
   current_stage?: LearningStage | null;
   unlocked_stages?: LearningStage[];
+  created_at?: string;
+  updated_at?: string;
+}
+
+export interface StageStartResult {
+  stage: LearningStage;
+  practice_session: PracticeSession;
+}
+
+export interface StageSubmitResult {
+  stage_id: string;
+  mastery_score: number;
+  passed: boolean;
+  unlock_next_stage: boolean;
+  next_action: string;
+  reason: StageProgress["last_reason"];
+  evidence: Array<Record<string, unknown>>;
+  practice_result?: PracticeResult | null;
 }
 
 export interface ExplanationVariant {
@@ -303,12 +338,39 @@ export interface WrongQuestion {
   wrong_id: string;
   question_id: string;
   knowledge_id: string;
+  question_type?: string;
   error_reason: string;
+  wrong_reason?: string;
   wrong_count: number;
+  retry_count?: number;
+  manual_wrong_reason?: string;
+  ai_wrong_reason?: string;
+  is_focus?: boolean;
+  last_retry_at?: string | null;
+  last_result?: string;
   review_status: string;
+  wrong_status?: string;
+  selected_supported?: boolean;
   last_wrong_at: string;
   next_review_at: string;
   question?: ContentQuestion | null;
+}
+
+export interface WrongQuestionDistributionItem {
+  key: string;
+  count: number;
+}
+
+export interface WrongQuestionSummary {
+  total: number;
+  unmastered: number;
+  focus_count: number;
+  pending_retry: number;
+  by_knowledge: WrongQuestionDistributionItem[];
+  by_question_type: WrongQuestionDistributionItem[];
+  by_wrong_reason: WrongQuestionDistributionItem[];
+  wrong_count_top10: WrongQuestion[];
+  repeated_wrong_questions: WrongQuestion[];
 }
 
 export interface ReviewItem {

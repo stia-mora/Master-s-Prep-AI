@@ -3,6 +3,8 @@ import type {
   DashboardSummary,
   DiagnosticResult,
   DiagnosticReport,
+  ExplainAgainMode,
+  ExplainAgainResult,
   KaoyanChatContext,
   RagQueryResult,
   PlanReorderResult,
@@ -10,8 +12,6 @@ import type {
   MasteryRecord,
   ExamSubmitResult,
   ExamSimulation,
-  ExplainAgainMode,
-  ExplainAgainResult,
   KaoyanProfile,
   KnowledgeDetail,
   KnowledgeNode,
@@ -26,7 +26,9 @@ import type {
   ReviewItem,
   StudyPlan,
   WrongQuestion,
+  WrongQuestionSummary,
 } from "./kaoyan-types";
+
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(apiUrl(path), {
@@ -231,8 +233,69 @@ export function submitPractice(
   });
 }
 
-export function getWrongQuestions(): Promise<WrongQuestion[]> {
-  return request<WrongQuestion[]>("/api/v1/kaoyan/wrong-questions");
+export function getWrongQuestions(input: {
+  knowledge_id?: string;
+  question_type?: string;
+  wrong_reason?: string;
+  status?: string;
+  sort?: string;
+  limit?: number;
+  offset?: number;
+} = {}): Promise<WrongQuestion[]> {
+  const params = new URLSearchParams();
+  Object.entries(input).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && String(value).trim()) {
+      params.set(key, String(value));
+    }
+  });
+  const query = params.toString();
+  return request<WrongQuestion[]>(`/api/v1/kaoyan/wrong-questions${query ? `?${query}` : ""}`);
+}
+
+export function getWrongQuestionSummary(): Promise<WrongQuestionSummary> {
+  return request<WrongQuestionSummary>("/api/v1/kaoyan/wrong-questions/summary");
+}
+
+export function retryWrongQuestion(
+  wrongId: string,
+  input: { retry_mode?: "original" | "variant"; limit?: number } = {},
+): Promise<PracticeSession> {
+  return request<PracticeSession>(`/api/v1/kaoyan/wrong-questions/${wrongId}/retry`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function batchRetryWrongQuestions(input: {
+  wrong_ids: string[];
+  retry_mode?: "original" | "variant" | "mixed";
+  limit?: number;
+}): Promise<PracticeSession> {
+  return request<PracticeSession>("/api/v1/kaoyan/wrong-questions/batch-retry", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function batchActionWrongQuestions(input: {
+  wrong_ids: string[];
+  action: "mark_focus" | "unmark_focus" | "set_reason" | "add_to_review" | "export_selected";
+  wrong_reason?: string;
+}): Promise<{ action: string; affected_count: number; items: WrongQuestion[] }> {
+  return request<{ action: string; affected_count: number; items: WrongQuestion[] }>("/api/v1/kaoyan/wrong-questions/batch-action", {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
+}
+
+export function updateWrongQuestionReason(
+  wrongId: string,
+  input: { wrong_reason: string; reason_source?: "manual" | "ai" },
+): Promise<WrongQuestion> {
+  return request<WrongQuestion>(`/api/v1/kaoyan/wrong-questions/${wrongId}/reason`, {
+    method: "POST",
+    body: JSON.stringify(input),
+  });
 }
 
 export function getReviewsToday(): Promise<ReviewItem[]> {

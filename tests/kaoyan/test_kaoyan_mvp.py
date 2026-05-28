@@ -1,4 +1,4 @@
-from __future__ import annotations
+﻿from __future__ import annotations
 
 import asyncio
 from pathlib import Path
@@ -137,6 +137,123 @@ def test_kaoyan_api_loop_uses_fallback_when_ai_fails(monkeypatch) -> None:
     assert client.get("/api/v1/kaoyan/wrong-questions").json()
     assert client.get("/api/v1/kaoyan/reviews/today").json()
     assert client.get("/api/v1/kaoyan/dashboard/summary").json()["wrong_count"] == 1
+
+
+def test_wrong_question_agent_b_interfaces(monkeypatch) -> None:
+    question = {
+        "question_id": "q_wrong_1",
+        "knowledge_id": "K_LIMIT",
+        "question_type": "选择题",
+        "difficulty_level": 2,
+        "stem": "1 + 1 = ?",
+        "stem_without_options": "1 + 1 = ?",
+        "answer": "A",
+        "analysis": "Use basic addition.",
+        "options": [{"label": "A", "content": "2"}, {"label": "B", "content": "3"}],
+        "is_choice": True,
+    }
+    variant = {
+        **question,
+        "question_id": "q_variant_1",
+        "stem": "2 + 2 = ?",
+        "stem_without_options": "2 + 2 = ?",
+        "answer": "A",
+    }
+
+    class FakeContentStore:
+        def select_questions(self, **kwargs):
+            exclude_ids = set(kwargs.get("exclude_ids") or [])
+            return [variant] if "q_wrong_1" in exclude_ids else [question]
+
+        def get_questions(self, question_ids):
+            by_id = {question["question_id"]: question, variant["question_id"]: variant}
+            return [by_id[item] for item in question_ids if item in by_id]
+
+        def get_knowledge(self, knowledge_id, question_limit=8):
+            return {"knowledge": {"knowledge_id": knowledge_id, "knowledge_name": "Limits"}}
+
+    content = FakeContentStore()
+    learning = KaoyanLearningStore(_runtime_db("wrong_agent_b"))
+
+    monkeypatch.setattr(kaoyan_router, "get_content_store", lambda: content)
+    monkeypatch.setattr(kaoyan_router, "get_learning_store", lambda: learning)
+
+    from master_prep_ai.kaoyan import ai_service
+
+    async def fail_complete(*args, **kwargs):
+        raise RuntimeError("no model in test")
+
+    monkeypatch.setattr(ai_service, "call_llm_complete", fail_complete)
+
+    app = FastAPI()
+    app.dependency_overrides[kaoyan_router.require_current_user] = lambda: AuthUser(
+        user_id="wrong-agent-b", email="wrong-b@example.com", display_name="Wrong B", role="student"
+    )
+    app.include_router(kaoyan_router.router, prefix="/api/v1/kaoyan")
+    client = TestClient(app)
+
+    practice = client.post(
+        "/api/v1/kaoyan/practice/session",
+        json={"knowledge_id": "MATH_GS_CH_01_SEC_01", "limit": 1},
+    )
+    assert practice.status_code == 200
+    session = practice.json()
+    submitted = client.post(
+        f"/api/v1/kaoyan/practice/{session['session_id']}/submit",
+        json={"answers": [{"question_id": session["questions"][0]["question_id"], "answer": "wrong"}]},
+    )
+    assert submitted.status_code == 200
+
+    wrongs = client.get("/api/v1/kaoyan/wrong-questions?sort=wrong_count").json()
+    assert wrongs
+    wrong = wrongs[0]
+    assert wrong["selected_supported"] is True
+    assert wrong["wrong_count"] == 1
+    assert wrong["retry_count"] == 0
+    assert wrong["question_type"]
+    assert wrong["question"]
+
+    summary = client.get("/api/v1/kaoyan/wrong-questions/summary")
+    assert summary.status_code == 200
+    assert summary.json()["total"] == 1
+    assert summary.json()["pending_retry"] == 1
+
+    reason = client.post(
+        f"/api/v1/kaoyan/wrong-questions/{wrong['wrong_id']}/reason",
+        json={"wrong_reason": "公式误用", "reason_source": "manual"},
+    )
+    assert reason.status_code == 200
+    assert reason.json()["wrong_reason"] == "公式误用"
+
+    batch = client.post(
+        "/api/v1/kaoyan/wrong-questions/batch-action",
+        json={"wrong_ids": [wrong["wrong_id"]], "action": "mark_focus"},
+    )
+    assert batch.status_code == 200
+    assert batch.json()["affected_count"] == 1
+    assert batch.json()["items"][0]["is_focus"] is True
+
+    retry = client.post(
+        f"/api/v1/kaoyan/wrong-questions/{wrong['wrong_id']}/retry",
+        json={"retry_mode": "original", "limit": 1},
+    )
+    assert retry.status_code == 200
+    retry_session = retry.json()
+    assert retry_session["session_type"] == "wrong_retry"
+    assert retry_session["questions"][0]["question_id"] == wrong["question_id"]
+
+    after_retry = client.get("/api/v1/kaoyan/wrong-questions").json()[0]
+    assert after_retry["retry_count"] == 1
+
+    retry_question = retry_session["questions"][0]
+    retry_submit = client.post(
+        f"/api/v1/kaoyan/practice/{retry_session['session_id']}/submit",
+        json={"answers": [{"question_id": retry_question["question_id"], "answer": retry_question["answer"]}]},
+    )
+    assert retry_submit.status_code == 200
+    mastered = client.get("/api/v1/kaoyan/wrong-questions?status=mastered").json()
+    assert mastered[0]["last_result"] == "correct"
+
 
 def test_kaoyan_feedback_interfaces(monkeypatch) -> None:
     content = KaoyanContentStore(CONTENT_DB)
