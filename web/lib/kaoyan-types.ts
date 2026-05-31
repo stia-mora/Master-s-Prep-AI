@@ -373,6 +373,59 @@ export interface WrongQuestionSummary {
   repeated_wrong_questions: WrongQuestion[];
 }
 
+export interface WrongQuestionRecommendationMaterial {
+  type: "formula" | "mistake" | "review_card" | "knowledge" | string;
+  title: string;
+  summary: string;
+}
+
+export interface WrongQuestionRecommendation {
+  recommendation_id: string;
+  knowledge_id: string;
+  knowledge_name: string;
+  module?: string;
+  priority: "high" | "medium" | "low" | string;
+  score: number;
+  reason: string;
+  study_direction: string;
+  primary_wrong_reason: string;
+  question_type?: string;
+  estimated_minutes: number;
+  actions: string[];
+  materials: WrongQuestionRecommendationMaterial[];
+  practice: {
+    source: PracticeSource | string;
+    knowledge_id: string;
+    question_type?: string;
+    question_kind?: QuestionKind | string;
+    limit?: number;
+    sample_question_ids?: string[];
+    wrong_ids?: string[];
+  };
+  metrics: {
+    wrong_question_count: number;
+    wrong_total: number;
+    retry_failed_count: number;
+    pending_retry_count: number;
+    focus_count: number;
+    mastery_score?: number | null;
+    wrong_reason_distribution?: WrongQuestionDistributionItem[];
+    question_type_distribution?: WrongQuestionDistributionItem[];
+  };
+}
+
+export interface WrongQuestionRecommendationsResponse {
+  generated_at: string;
+  basis: {
+    active_wrong_count: number;
+    weak_knowledge_count: number;
+    mastery_records_used?: number;
+  };
+  next_focus_knowledge_ids: string[];
+  learning_path_hint: string;
+  recommendations: WrongQuestionRecommendation[];
+}
+
 export interface ReviewItem {
   review_id: string;
   source_type: string;

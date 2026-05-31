@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from collections import Counter
+from datetime import datetime, timezone
 from typing import Any, Literal
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
@@ -202,6 +204,154 @@ def _enrich_wrong_rows(rows: list[dict[str, Any]]) -> list[dict[str, Any]]:
         item["selected_supported"] = True
         enriched.append(item)
     return enriched
+
+
+def _wrong_reason_strategy(reason: str) -> tuple[str, list[str]]:
+    normalized = str(reason or "").strip().lower()
+    if any(token in normalized for token in ["公式", "formula"]):
+        return "先整理公式适用条件，再用同类题做辨析训练。", ["整理公式卡片", "对比适用条件", "做 3 道同类变式"]
+    if any(token in normalized for token in ["概念", "定义", "concept"]):
+        return "先补概念定义和典型反例，再回到原错题复盘。", ["回看知识点讲解", "写出关键定义", "复盘原错题"]
+    if any(token in normalized for token in ["计算", "粗心", "审题", "calculation"]):
+        return "用限时小练把步骤稳定下来，并在题干条件处做标注。", ["限时 10 分钟小练", "标注题干条件", "检查每一步变形"]
+    if any(token in normalized for token in ["方法", "思路", "不会", "method"]):
+        return "先看标准解法拆解，再做变式题巩固方法迁移。", ["拆解标准解法", "总结题型入口", "做变式重刷"]
+    return "先定位错因，再按原题复盘、资料补弱、变式检测三步走。", ["复盘原错题", "补对应资料", "生成专项练习"]
+
+
+def _build_wrong_recommendations(rows: list[dict[str, Any]], user_id: str, limit: int) -> dict[str, Any]:
+    active_rows = [row for row in rows if row.get("review_status") != "mastered"]
+    if not active_rows:
+        return {
+            "generated_at": datetime.now(timezone.utc).isoformat(),
+            "basis": {"active_wrong_count": 0, "weak_knowledge_count": 0},
+            "next_focus_knowledge_ids": [],
+            "learning_path_hint": "当前没有未掌握错题，建议保持复习节奏并继续做阶段检测。",
+            "recommendations": [],
+        }
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in active_rows:
+        knowledge_id = str(row.get("knowledge_id") or "")
+        if not knowledge_id:
+            continue
+        grouped.setdefault(knowledge_id, []).append(row)
+
+    mastery_by_knowledge = {
+        str(item.get("knowledge_id") or ""): float(item.get("mastery_score") or 0)
+        for item in _learning().list_mastery_records(user_id, limit=500)
+    }
+    recommendations: list[dict[str, Any]] = []
+    for knowledge_id, items in grouped.items():
+        wrong_total = sum(int(item.get("wrong_count") or 0) for item in items)
+        retry_failed = sum(1 for item in items if item.get("last_result") == "wrong")
+        pending_retry = sum(1 for item in items if int(item.get("retry_count") or 0) == 0)
+        focus_count = sum(1 for item in items if item.get("is_focus"))
+        mastery_score = mastery_by_knowledge.get(knowledge_id)
+        reason_counts = Counter(
+            str(item.get("wrong_reason") or item.get("manual_wrong_reason") or item.get("ai_wrong_reason") or item.get("error_reason") or "未标注")
+            for item in items
+        )
+        question_type_counts = Counter(str(item.get("question_type") or "未标注") for item in items)
+        primary_reason = reason_counts.most_common(1)[0][0] if reason_counts else "未标注"
+        primary_question_type = question_type_counts.most_common(1)[0][0] if question_type_counts else ""
+        direction, actions = _wrong_reason_strategy(primary_reason)
+        score = (
+            len(items) * 12
+            + wrong_total * 8
+            + retry_failed * 14
+            + pending_retry * 5
+            + focus_count * 10
+            + (max(0.0, 70.0 - mastery_score) * 0.35 if mastery_score is not None else 8)
+        )
+        detail = _content().get_knowledge(knowledge_id, question_limit=6) or {}
+        knowledge = detail.get("knowledge") or {}
+        knowledge_name = str(knowledge.get("knowledge_name") or knowledge.get("title") or knowledge_id)
+        materials: list[dict[str, Any]] = []
+        for formula in (detail.get("formulas") or [])[:2]:
+            materials.append({
+                "type": "formula",
+                "title": str(formula.get("formula_name") or "公式回看"),
+                "summary": str(formula.get("usage_scene") or formula.get("formula_content") or ""),
+            })
+        for mistake in (detail.get("mistakes") or [])[:2]:
+            materials.append({
+                "type": "mistake",
+                "title": "易错点提醒",
+                "summary": str(mistake.get("correction_method") or mistake.get("mistake_content") or ""),
+            })
+        for card in (detail.get("review_cards") or [])[:1]:
+            materials.append({
+                "type": "review_card",
+                "title": str(card.get("card_type") or "复习卡片"),
+                "summary": str(card.get("front_content") or ""),
+            })
+        sample_questions = _content().select_questions(
+            knowledge_id=knowledge_id,
+            question_type="" if primary_question_type == "未标注" else primary_question_type,
+            question_family="choice",
+            limit=3,
+            exclude_ids=[str(item.get("question_id") or "") for item in items],
+        )
+        reason_text = f"{knowledge_name} 有 {len(items)} 道未掌握错题，累计错 {wrong_total} 次"
+        if retry_failed:
+            reason_text += f"，其中 {retry_failed} 道重刷后仍错"
+        if mastery_score is not None:
+            reason_text += f"，当前掌握度约 {mastery_score:.0f} 分"
+        reason_text += f"；主要错因是“{primary_reason}”。"
+        recommendations.append({
+            "recommendation_id": f"wrong_rec_{knowledge_id}",
+            "knowledge_id": knowledge_id,
+            "knowledge_name": knowledge_name,
+            "module": knowledge.get("module") or knowledge.get("chapter") or "",
+            "priority": "high" if score >= 55 else "medium" if score >= 30 else "low",
+            "score": round(score, 1),
+            "reason": reason_text,
+            "study_direction": direction,
+            "primary_wrong_reason": primary_reason,
+            "question_type": "" if primary_question_type == "未标注" else primary_question_type,
+            "estimated_minutes": min(90, 25 + len(items) * 8 + retry_failed * 10),
+            "actions": actions,
+            "materials": materials or [{
+                "type": "knowledge",
+                "title": knowledge_name,
+                "summary": str(knowledge.get("full_path") or "回看该知识点讲解与例题。"),
+            }],
+            "practice": {
+                "source": "knowledge",
+                "knowledge_id": knowledge_id,
+                "question_type": "" if primary_question_type == "未标注" else primary_question_type,
+                "question_kind": "variant" if retry_failed or wrong_total >= 2 else "basic",
+                "limit": min(8, max(3, len(items) + 2)),
+                "sample_question_ids": [str(item.get("question_id") or "") for item in sample_questions],
+                "wrong_ids": [str(item.get("wrong_id") or "") for item in items],
+            },
+            "metrics": {
+                "wrong_question_count": len(items),
+                "wrong_total": wrong_total,
+                "retry_failed_count": retry_failed,
+                "pending_retry_count": pending_retry,
+                "focus_count": focus_count,
+                "mastery_score": mastery_score,
+                "wrong_reason_distribution": [{"key": key, "count": count} for key, count in reason_counts.most_common()],
+                "question_type_distribution": [{"key": key, "count": count} for key, count in question_type_counts.most_common()],
+            },
+        })
+
+    recommendations.sort(key=lambda item: float(item["score"]), reverse=True)
+    selected = recommendations[: max(1, min(int(limit), 8))]
+    focus_names = "、".join(str(item["knowledge_name"]) for item in selected[:3])
+    return {
+        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "basis": {
+            "active_wrong_count": len(active_rows),
+            "weak_knowledge_count": len(grouped),
+            "mastery_records_used": len(mastery_by_knowledge),
+        },
+        "next_focus_knowledge_ids": [str(item["knowledge_id"]) for item in selected],
+        "learning_path_hint": f"建议下一轮学习路径优先安排：{focus_names}。" if focus_names else "建议继续完成错题复盘。",
+        "recommendations": selected,
+    }
 
 
 def _create_wrong_retry_session(
@@ -602,6 +752,15 @@ async def wrong_questions_summary(user: AuthUser = Depends(require_current_user)
     summary["wrong_count_top10"] = _enrich_wrong_rows(summary.get("wrong_count_top10") or [])
     summary["repeated_wrong_questions"] = _enrich_wrong_rows(summary.get("repeated_wrong_questions") or [])
     return summary
+
+
+@router.get("/wrong-questions/recommendations")
+async def wrong_question_recommendations(
+    limit: int = Query(default=3, ge=1, le=8),
+    user: AuthUser = Depends(require_current_user),
+) -> dict[str, Any]:
+    rows = _learning().list_wrong_questions(user.user_id, sort="wrong_count", limit=500)
+    return _build_wrong_recommendations(rows, user.user_id, limit)
 
 
 @router.post("/wrong-questions/{wrong_id}/retry")

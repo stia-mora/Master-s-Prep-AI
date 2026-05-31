@@ -26,6 +26,7 @@ import type {
   ReviewItem,
   StudyPlan,
   WrongQuestion,
+  WrongQuestionRecommendationsResponse,
   WrongQuestionSummary,
 } from "./kaoyan-types";
 
@@ -190,7 +191,7 @@ export function createPracticeSession(input: {
   });
 }
 
-export function generatePractice(input: {
+export async function generatePractice(input: {
   source?: PracticeSource;
   stage_id?: string;
   origin_id?: string;
@@ -203,10 +204,29 @@ export function generatePractice(input: {
   difficulty_level?: number;
   limit?: number;
 }): Promise<PracticeSession> {
-  return request<PracticeSession>("/api/v1/kaoyan/practice/generate", {
-    method: "POST",
-    body: JSON.stringify(input),
-  });
+  try {
+    return await request<PracticeSession>("/api/v1/kaoyan/practice/generate", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    if (input.source === "stage" || !message.includes("No questions available")) {
+      throw err;
+    }
+    return createPracticeSession({
+      session_type: input.source === "wrong_retry" ? "wrong_retry" : "special",
+      knowledge_id: input.knowledge_id,
+      source_question_id: input.source_question_id,
+      question_type: input.question_type,
+      question_family: input.question_family,
+      difficulty_level: input.difficulty_level,
+      limit: input.limit,
+      source: input.source,
+      origin_id: input.origin_id || input.source_question_id || "",
+      tab_id: input.tab_id || "",
+    });
+  }
 }
 
 export function createPracticePdf(input: PracticePdfRequest = {}): Promise<PracticePdfPayload> {
@@ -254,6 +274,10 @@ export function getWrongQuestions(input: {
 
 export function getWrongQuestionSummary(): Promise<WrongQuestionSummary> {
   return request<WrongQuestionSummary>("/api/v1/kaoyan/wrong-questions/summary");
+}
+
+export function getWrongQuestionRecommendations(limit = 3): Promise<WrongQuestionRecommendationsResponse> {
+  return request<WrongQuestionRecommendationsResponse>(`/api/v1/kaoyan/wrong-questions/recommendations?limit=${limit}`);
 }
 
 export function retryWrongQuestion(

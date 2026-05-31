@@ -28,6 +28,24 @@ function mockFetch(body: unknown = {}) {
   }) as typeof fetch;
 }
 
+function mockFetchSequence(responses: Array<{ ok?: boolean; status?: number; body?: unknown; text?: string }>) {
+  fetchCalls.length = 0;
+  let index = 0;
+  (globalThis as { fetch: typeof fetch }).fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    fetchCalls.push({ url: String(input), init });
+    const response = responses[Math.min(index, responses.length - 1)] || {};
+    index += 1;
+    const body = response.body ?? {};
+    return {
+      ok: response.ok ?? true,
+      status: response.status ?? 200,
+      json: async () => body,
+      text: async () => response.text ?? JSON.stringify(body),
+      blob: async () => new Blob([body instanceof Uint8Array ? Array.from(body).join("") : JSON.stringify(body)]),
+    } as Response;
+  }) as typeof fetch;
+}
+
 async function loadKaoyanApi(): Promise<typeof import("../lib/kaoyan-api")> {
   return import("../lib/kaoyan-api");
 }
@@ -92,6 +110,19 @@ test("practice helpers route choice sessions and free-response pdf payloads", as
   assert.equal(fetchCalls[0].init?.method, "POST");
   assert.equal(fetchCalls[0].init?.body, JSON.stringify({ knowledge_id: "K_LIMIT", question_ids: ["q_fill"], limit: 1 }));
   assert.equal(blob.size > 0, true);
+
+  mockFetchSequence([
+    { ok: false, status: 404, text: '{"detail":"No questions available for this generation request"}' },
+    { body: { session_id: "fallback_practice", questions: [{ question_id: "q1" }] } },
+  ]);
+  const fallbackSession = await api.generatePractice({ source: "knowledge", question_family: "choice", limit: 5 });
+  assert.equal(fallbackSession.session_id, "fallback_practice");
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/practice/generate");
+  assert.equal(fetchCalls[1].url, "/api/v1/kaoyan/practice/session");
+  assert.equal(
+    fetchCalls[1].init?.body,
+    JSON.stringify({ session_type: "special", question_family: "choice", limit: 5, source: "knowledge", origin_id: "", tab_id: "" }),
+  );
 });
 
 test("stage learning path and generated practice helpers use role C endpoints", async () => {
@@ -159,6 +190,10 @@ test("wrong question agent B helpers use the expected endpoints", async () => {
   mockFetch({ total: 1, unmastered: 1, focus_count: 0, pending_retry: 1, by_knowledge: [], by_question_type: [], by_wrong_reason: [], wrong_count_top10: [], repeated_wrong_questions: [] });
   await api.getWrongQuestionSummary();
   assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/wrong-questions/summary");
+
+  mockFetch({ generated_at: "now", basis: { active_wrong_count: 1, weak_knowledge_count: 1 }, next_focus_knowledge_ids: ["K_LIMIT"], learning_path_hint: "hint", recommendations: [] });
+  await api.getWrongQuestionRecommendations(4);
+  assert.equal(fetchCalls[0].url, "/api/v1/kaoyan/wrong-questions/recommendations?limit=4");
 
   mockFetch({ session_id: "prac_retry", questions: [] });
   await api.retryWrongQuestion("wrong_1", { retry_mode: "variant", limit: 1 });

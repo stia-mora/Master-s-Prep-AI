@@ -442,6 +442,7 @@ class KaoyanLearningStore:
             self._ensure_column(conn, "wrong_question", "is_focus", "INTEGER NOT NULL DEFAULT 0")
             self._ensure_column(conn, "wrong_question", "last_retry_at", "TEXT")
             self._ensure_column(conn, "wrong_question", "last_result", "TEXT NOT NULL DEFAULT ''")
+            self._ensure_learning_path_columns(conn)
             conn.commit()
 
     def _ensure_column(
@@ -450,6 +451,44 @@ class KaoyanLearningStore:
         columns = {row["name"] for row in conn.execute(f"PRAGMA table_info({table})").fetchall()}
         if column not in columns:
             conn.execute(f"ALTER TABLE {table} ADD COLUMN {column} {definition}")
+
+    def _ensure_learning_path_columns(self, conn: sqlite3.Connection) -> None:
+        tables = {row["name"] for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'").fetchall()}
+        if "learning_path" in tables:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(learning_path)").fetchall()}
+            if "path_id" not in cols:
+                conn.execute("ALTER TABLE learning_path ADD COLUMN path_id TEXT")
+                cols.add("path_id")
+            if "id" in cols:
+                conn.execute("UPDATE learning_path SET path_id = id WHERE path_id IS NULL OR path_id = ''")
+        if "learning_stage" in tables:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(learning_stage)").fetchall()}
+            if "stage_id" not in cols:
+                conn.execute("ALTER TABLE learning_stage ADD COLUMN stage_id TEXT")
+                cols.add("stage_id")
+            if "id" in cols:
+                conn.execute("UPDATE learning_stage SET stage_id = id WHERE stage_id IS NULL OR stage_id = ''")
+        if "stage_progress" in tables:
+            cols = {row["name"] for row in conn.execute("PRAGMA table_info(stage_progress)").fetchall()}
+            if "progress_id" not in cols:
+                conn.execute("ALTER TABLE stage_progress ADD COLUMN progress_id TEXT")
+            if "last_reason" not in cols:
+                conn.execute("ALTER TABLE stage_progress ADD COLUMN last_reason TEXT NOT NULL DEFAULT ''")
+                cols.add("last_reason")
+            if "last_reason_json" in cols:
+                conn.execute("UPDATE stage_progress SET last_reason = last_reason_json WHERE last_reason = ''")
+            if "created_at" not in cols:
+                conn.execute("ALTER TABLE stage_progress ADD COLUMN created_at TEXT")
+                cols.add("created_at")
+            if "updated_at" in cols:
+                conn.execute("UPDATE stage_progress SET created_at = updated_at WHERE created_at IS NULL OR created_at = ''")
+            conn.execute(
+                """
+                UPDATE stage_progress
+                SET progress_id = 'prog_' || lower(hex(randomblob(6)))
+                WHERE progress_id IS NULL OR progress_id = ''
+                """
+            )
 
     def upsert_profile(self, payload: dict[str, Any], user_id: str = DEFAULT_USER_ID) -> dict[str, Any]:
         now = utc_now()

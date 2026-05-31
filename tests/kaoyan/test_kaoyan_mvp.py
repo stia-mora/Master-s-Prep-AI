@@ -120,6 +120,13 @@ def test_kaoyan_api_loop_uses_fallback_when_ai_fails(monkeypatch) -> None:
     assert tasks.status_code == 200
     assert tasks.json()
 
+    generated = client.post(
+        "/api/v1/kaoyan/practice/generate",
+        json={"source": "knowledge", "question_family": "choice", "limit": 2},
+    )
+    assert generated.status_code == 200
+    assert generated.json()["questions"]
+
     practice = client.post(
         "/api/v1/kaoyan/practice/session",
         json={"knowledge_id": "MATH_GS_CH_01_SEC_01", "limit": 1},
@@ -170,7 +177,12 @@ def test_wrong_question_agent_b_interfaces(monkeypatch) -> None:
             return [by_id[item] for item in question_ids if item in by_id]
 
         def get_knowledge(self, knowledge_id, question_limit=8):
-            return {"knowledge": {"knowledge_id": knowledge_id, "knowledge_name": "Limits"}}
+            return {
+                "knowledge": {"knowledge_id": knowledge_id, "knowledge_name": "Limits", "module": "高数"},
+                "formulas": [{"formula_name": "极限公式", "formula_content": "lim", "usage_scene": "极限计算"}],
+                "mistakes": [{"mistake_content": "公式误用", "correction_method": "先判断适用条件"}],
+                "review_cards": [{"card_type": "concept", "front_content": "极限定义"}],
+            }
 
     content = FakeContentStore()
     learning = KaoyanLearningStore(_runtime_db("wrong_agent_b"))
@@ -224,6 +236,18 @@ def test_wrong_question_agent_b_interfaces(monkeypatch) -> None:
     )
     assert reason.status_code == 200
     assert reason.json()["wrong_reason"] == "公式误用"
+
+    recommendations = client.get("/api/v1/kaoyan/wrong-questions/recommendations")
+    assert recommendations.status_code == 200
+    recommendation_body = recommendations.json()
+    assert recommendation_body["basis"]["active_wrong_count"] == 1
+    assert recommendation_body["next_focus_knowledge_ids"] == ["K_LIMIT"]
+    top_recommendation = recommendation_body["recommendations"][0]
+    assert top_recommendation["knowledge_id"] == "K_LIMIT"
+    assert top_recommendation["primary_wrong_reason"] == "公式误用"
+    assert top_recommendation["materials"]
+    assert top_recommendation["practice"]["knowledge_id"] == "K_LIMIT"
+    assert top_recommendation["actions"]
 
     batch = client.post(
         "/api/v1/kaoyan/wrong-questions/batch-action",
