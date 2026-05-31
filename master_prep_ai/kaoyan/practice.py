@@ -196,6 +196,18 @@ class KaoyanPracticeService:
                     stage_id=stage_id or "",
                     tab_id=tab_id or "",
                 ).get("questions", [])
+            if not questions and source != "stage":
+                fallback_attempts = [
+                    {"question_type": question_type, "question_family": question_family, "difficulty_level": difficulty},
+                    {"question_type": question_type, "question_family": question_family},
+                    {"question_family": question_family, "difficulty_level": difficulty},
+                    {"question_family": question_family},
+                ]
+                for filters in fallback_attempts:
+                    filters = {key: value for key, value in filters.items() if value is not None}
+                    questions = self.content_store.select_questions(limit=limit, **filters)
+                    if questions:
+                        break
         question_ids = [str(item["question_id"]) for item in questions]
         session = self.learning_store.create_practice_session(
             session_type="stage_practice" if source == "stage" else source,
