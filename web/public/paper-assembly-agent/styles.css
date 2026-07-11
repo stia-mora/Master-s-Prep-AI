@@ -1,17 +1,16 @@
 :root {
-  --bg: #faf9f6;
+  --bg: #f6f7f9;
   --panel: #ffffff;
-  --panel-soft: #ece7dd;
-  --panel-alt: #fdfbf8;
-  --text: #1f1d1b;
-  --muted: #6b655f;
-  --line: #dbd4c8;
-  --accent: #b0501e;
-  --accent-strong: #7d3916;
-  --accent-soft: #f4e3d8;
+  --panel-soft: #f0f5f3;
+  --text: #18201d;
+  --muted: #65716b;
+  --line: #dfe6e2;
+  --accent: #176b5c;
+  --accent-strong: #0e4f42;
+  --accent-soft: #dcefe9;
   --warn: #9c5b12;
-  --danger: #c53a2c;
-  --shadow: 0 12px 32px rgba(31, 29, 27, 0.07);
+  --danger: #a83f3f;
+  --shadow: 0 14px 40px rgba(34, 45, 40, 0.08);
 }
 
 * {
@@ -42,8 +41,8 @@ button {
   inset: 0 auto 0 0;
   width: 276px;
   padding: 22px;
-  background: #2a2725;
-  color: #e8e4de;
+  background: #17231f;
+  color: #f8fbfa;
   display: flex;
   flex-direction: column;
   gap: 22px;
@@ -60,8 +59,8 @@ button {
   height: 42px;
   display: grid;
   place-items: center;
-  border: 1px solid rgba(255, 255, 255, 0.16);
-  background: #3a3634;
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  background: #26443b;
   border-radius: 8px;
   font-weight: 700;
 }
@@ -85,7 +84,7 @@ button {
 
 .brand p {
   margin-top: 4px;
-  color: #cfc7bd;
+  color: #b9c7c1;
   font-size: 13px;
 }
 
@@ -115,7 +114,7 @@ button {
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  color: #cfc7bd;
+  color: #cbd8d3;
   font-size: 13px;
   line-height: 1.6;
 }
@@ -483,12 +482,12 @@ button {
   border: 0;
   border-radius: 999px;
   color: var(--accent-strong);
-  background: rgba(176, 80, 30, 0.14);
+  background: rgba(23, 107, 92, 0.14);
   font-size: 12px;
 }
 
 .card-collapse-button:hover {
-  background: rgba(176, 80, 30, 0.22);
+  background: rgba(23, 107, 92, 0.22);
 }
 
 .upload-card {
@@ -520,13 +519,41 @@ button {
   line-height: 1.5;
 }
 
+.conversion-panel {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 160px;
+  gap: 14px;
+  align-items: center;
+  margin: 0 0 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--panel);
+  box-shadow: var(--shadow);
+}
+
+.conversion-copy {
+  display: grid;
+  gap: 8px;
+}
+
+.conversion-copy h4,
+.conversion-copy p {
+  margin: 0;
+}
+
+.conversion-copy p {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
 .selection-hint {
   margin-bottom: 18px;
   padding: 16px;
   border: 1px dashed var(--line);
   border-radius: 8px;
   color: var(--muted);
-  background: var(--panel-alt);
+  background: #fff;
 }
 
 .assembly-options[hidden] {
@@ -545,7 +572,7 @@ button {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel-alt);
+  background: #fff;
 }
 
 .panel-grid {
@@ -652,7 +679,7 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--muted);
-  background: var(--panel-alt);
+  background: #fbfcfc;
   line-height: 1.55;
 }
 
@@ -685,7 +712,7 @@ fieldset {
   display: grid;
   gap: 7px;
   margin: 0 0 14px;
-  color: #4c4742;
+  color: #34413c;
   font-size: 14px;
 }
 
@@ -702,7 +729,7 @@ textarea {
   border-radius: 8px;
   padding: 10px 11px;
   color: var(--text);
-  background: var(--panel);
+  background: #fff;
 }
 
 textarea {
@@ -725,7 +752,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-  background: var(--panel-alt);
+  background: #fbfcfc;
 }
 
 .segmented input {
@@ -825,7 +852,7 @@ textarea {
   padding: 11px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel-alt);
+  background: #fbfcfc;
 }
 
 .summary-item strong {
@@ -844,7 +871,7 @@ textarea {
   border: 1px solid #efcf9c;
   border-radius: 8px;
   color: var(--warn);
-  background: #f9efe1;
+  background: #fff7ea;
 }
 
 .question {
@@ -856,7 +883,7 @@ textarea {
 }
 
 .question.is-highlighted .question-body {
-  background: #fff2b8;
+  background: #fff7bf;
 }
 
 .question.is-underlined .question-body {
@@ -866,7 +893,7 @@ textarea {
 }
 
 .question.is-starred {
-  border-color: #d08b36;
+  border-color: #e0ab49;
 }
 
 .question-title {
@@ -903,7 +930,60 @@ textarea {
   padding: 12px;
   border-radius: 8px;
   line-height: 1.78;
-  white-space: pre-wrap;
+  white-space: normal;
+}
+
+.math-inline,
+.math-block {
+  font-family: "Cambria Math", "Times New Roman", serif;
+  color: #111827;
+}
+
+.math-inline {
+  display: inline-block;
+  padding: 0 2px;
+  white-space: normal;
+}
+
+.math-block {
+  display: block;
+  margin: 10px 0;
+  overflow-x: auto;
+  white-space: normal;
+}
+
+.fraction {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  vertical-align: middle;
+  line-height: 1.05;
+  margin: 0 2px;
+}
+
+.fraction span:first-child {
+  border-bottom: 1px solid currentColor;
+  padding: 0 3px 1px;
+}
+
+.fraction span:last-child {
+  padding: 1px 3px 0;
+}
+
+.over-arrow {
+  text-decoration: overline;
+}
+
+.underbrace {
+  border-bottom: 1px solid currentColor;
+  padding-bottom: 2px;
+}
+
+.matrix {
+  display: inline-block;
+  padding: 2px 8px;
+  border-left: 1px solid currentColor;
+  border-right: 1px solid currentColor;
 }
 
 .choice-list {
@@ -918,7 +998,7 @@ textarea {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel-alt);
+  background: #fbfcfc;
 }
 
 .question-actions {
@@ -950,7 +1030,7 @@ textarea {
   padding: 36px;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  background: var(--panel);
+  background: #fff;
   text-align: center;
 }
 
@@ -990,7 +1070,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--accent-strong);
-  background: var(--panel-alt);
+  background: #fbfcfc;
 }
 
 .filter-chip.is-active,
@@ -1055,7 +1135,7 @@ textarea {
   border-left: 3px solid var(--accent);
   border-radius: 6px;
   color: var(--text);
-  background: var(--panel-alt);
+  background: #fbfcfc;
   line-height: 1.6;
 }
 
@@ -1079,7 +1159,7 @@ textarea {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
-  color: #4c4742;
+  color: #34413c;
   font-size: 14px;
 }
 
@@ -1124,7 +1204,7 @@ textarea {
 
 .original-card button:disabled {
   cursor: not-allowed;
-  background: #c9beb0;
+  background: #b8c7c1;
 }
 
 .original-card-actions {
@@ -1154,7 +1234,7 @@ textarea {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel-alt);
+  background: #fbfcfc;
 }
 
 .upload-edit-form {
@@ -1168,7 +1248,7 @@ textarea {
 .upload-edit-form label {
   display: grid;
   gap: 6px;
-  color: #4c4742;
+  color: #34413c;
   font-size: 13px;
 }
 
@@ -1178,7 +1258,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
-  background: var(--panel-alt);
+  background: #fbfcfc;
   resize: vertical;
 }
 
@@ -1211,7 +1291,7 @@ textarea {
   padding: 8px 10px;
   border-left: 3px solid var(--accent);
   border-radius: 6px;
-  background: var(--panel-alt);
+  background: #fbfcfc;
 }
 
 .wrong-row input[type="checkbox"] {
@@ -1224,8 +1304,8 @@ textarea {
   overflow: auto;
   padding: 14px;
   border-radius: 8px;
-  background: #2a2725;
-  color: #f1ece6;
+  background: #101915;
+  color: #d9eee8;
   white-space: pre-wrap;
 }
 
@@ -1239,7 +1319,7 @@ textarea {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: var(--panel-alt);
+  background: #fbfcfc;
 }
 
 .type-node h4 {
@@ -1254,7 +1334,7 @@ textarea {
   padding: 12px 14px;
   border-radius: 8px;
   color: #fff;
-  background: rgba(42, 39, 37, 0.96);
+  background: rgba(23, 35, 31, 0.96);
   opacity: 0;
   transform: translateY(12px);
   transition: opacity 160ms ease, transform 160ms ease;
@@ -1293,6 +1373,7 @@ textarea {
 
   .question-foot,
   .original-card,
+  .conversion-panel,
   .annotation-row,
   .wrong-row {
     grid-template-columns: 1fr;
