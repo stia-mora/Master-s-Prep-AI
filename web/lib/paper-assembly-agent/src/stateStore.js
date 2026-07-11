@@ -3,8 +3,6 @@ const path = require("node:path");
 const { DEFAULT_USER_ID } = require("./constants");
 const { nowIso, stableId } = require("./utils");
 
-const emptyState = () => ({ version: 1, users: {} });
-
 class StateStore {
   constructor(filePath) {
     this.filePath = filePath;
@@ -14,14 +12,13 @@ class StateStore {
   load() {
     fs.mkdirSync(path.dirname(this.filePath), { recursive: true });
     if (!fs.existsSync(this.filePath)) {
-      return emptyState();
+      return { version: 1, users: {} };
     }
-
     try {
       const parsed = JSON.parse(fs.readFileSync(this.filePath, "utf8"));
-      return parsed && parsed.users ? parsed : emptyState();
+      return parsed && parsed.users ? parsed : { version: 1, users: {} };
     } catch {
-      return emptyState();
+      return { version: 1, users: {} };
     }
   }
 

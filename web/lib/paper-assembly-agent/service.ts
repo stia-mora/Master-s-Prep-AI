@@ -32,7 +32,7 @@ const requireFromAgent = createRequire(path.join(AGENT_ROOT, "service.js"));
 const {
   DEFAULT_USER_ID,
   SUBJECTS,
-  SUBJECT_PLAN_MATH,
+  SUBJECT_PLAN_408,
 } = requireFromAgent("./src/constants.js");
 const { loadQuestionBank } = requireFromAgent("./src/markdownParser.js");
 const { PaperAssembler } = requireFromAgent("./src/paperAssembler.js");
@@ -475,7 +475,7 @@ export const paperAssemblyService = {
   },
 
   modules() {
-    return { modules: SUBJECT_PLAN_MATH.modules, plan: SUBJECT_PLAN_MATH };
+    return { modules: SUBJECT_PLAN_408.modules, plan: SUBJECT_PLAN_408 };
   },
 
   subjects() {
@@ -492,35 +492,6 @@ export const paperAssemblyService = {
 
   uploads() {
     return { items: getUploadSourceItems() };
-  },
-
-  conversionStatus() {
-    return {
-      ok: true,
-      status: "ready",
-      runtime: {
-        ok: true,
-        status: "ready",
-        engine: process.env.OPENAI_API_KEY ? "markitdown-ocr" : "markitdown",
-        message: "PDF uploads are converted automatically.",
-      },
-      system: {
-        status: "not_configured",
-        conversionStatus: "not_configured",
-        message: "System PDF batch conversion is not configured in the integrated app.",
-      },
-      pendingSystemPdfCount: 0,
-      lastLog: "",
-    };
-  },
-
-  convertSystemExams() {
-    return {
-      ok: false,
-      status: "not_configured",
-      conversionStatus: "not_configured",
-      message: "System PDF batch conversion is not configured in the integrated app.",
-    };
   },
 
   updateUploadedMaterial(payload: JsonRecord) {

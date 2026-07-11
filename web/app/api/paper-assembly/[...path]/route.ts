@@ -34,7 +34,6 @@ async function handlePaperAssembly(request: NextRequest, context: RouteContext) 
     if (request.method === "GET" && route === "/paper/question-types") return json(paperAssemblyService.questionTypes());
     if (request.method === "GET" && route === "/papers/original") return json(paperAssemblyService.originalPapers());
     if (request.method === "GET" && route === "/uploads") return json(paperAssemblyService.uploads());
-    if (request.method === "GET" && route === "/conversion/status") return json(paperAssemblyService.conversionStatus());
     if (request.method === "GET" && route === "/wrong-questions") return json(paperAssemblyService.wrongQuestions(userId));
     if (request.method === "GET" && route === "/wrong-questions/summary") {
       return json(paperAssemblyService.wrongQuestionSummary(userId));
@@ -63,10 +62,6 @@ async function handlePaperAssembly(request: NextRequest, context: RouteContext) 
     if (request.method === "DELETE" && route === "/uploads") {
       const deleted = paperAssemblyService.deleteUploadedMaterial(await readJson(request));
       return deleted ? json({ deleted }) : json({ error: "Upload not found" }, 404);
-    }
-
-    if (request.method === "POST" && route === "/conversion/system-exams") {
-      return json(paperAssemblyService.convertSystemExams());
     }
 
     if (request.method === "POST" && route === "/paper/assemble") {
