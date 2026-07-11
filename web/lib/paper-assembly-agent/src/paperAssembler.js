@@ -1,13 +1,13 @@
+const path = require("node:path");
 const {
   QUESTION_TYPE_LABELS,
-  SUBJECT_PLAN_408,
+  SUBJECT_PLAN_MATH,
   modulePercent
 } = require("./constants");
-const path = require("node:path");
 const { clampNumber, groupBy, nowIso, shuffle, stableId } = require("./utils");
 
 function sourceMatches(question, sourceScope) {
-  if (sourceScope === "exam408") return question.sourceKind === "exam408";
+  if (sourceScope === "examMath") return question.sourceKind === "examMath";
   if (sourceScope === "practice") return question.sourceKind === "practice";
   return true;
 }
@@ -38,7 +38,7 @@ function summarizeQuestions(questions) {
 function takeRandom(candidates, count, warnings, label) {
   const selected = shuffle(candidates).slice(0, count);
   if (selected.length < count) {
-    warnings.push(`${label} 需要 ${count} 题，当前可用 ${selected.length} 题。`);
+    warnings.push(`${label}需要 ${count} 题，当前可用 ${selected.length} 题。`);
   }
   return selected;
 }
@@ -50,32 +50,34 @@ function distributePoints(total, count) {
   return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
 }
 
-function apply408SlotPoints(subjectModule, choices, comprehensive) {
+function applyMathSlotPoints(module, choices, comprehensive) {
   const choiceQuestions = choices.map((question, index) => ({
     ...question,
     originalPoints: question.points,
-    points: 2,
-    paperSlot: `${subjectModule.shortName || subjectModule.name} 单选 ${index + 1}`,
-    paperPointsSource: "408_template"
+    points: SUBJECT_PLAN_MATH.choicePoints,
+    paperSlot: `${module.shortName || module.name} 选择 ${index + 1}`,
+    paperPointsSource: "math_template"
   }));
-  const comprehensiveTotal = Math.max(0, subjectModule.points - subjectModule.choiceCount * 2);
-  const comprehensivePoints = distributePoints(comprehensiveTotal, subjectModule.comprehensiveCount);
+  const choiceTotal = module.choiceCount * SUBJECT_PLAN_MATH.choicePoints;
+  const comprehensiveTotal = Math.max(0, module.points - choiceTotal);
+  const comprehensivePoints = distributePoints(comprehensiveTotal, module.comprehensiveCount);
   const comprehensiveQuestions = comprehensive.map((question, index) => ({
     ...question,
     originalPoints: question.points,
     points: comprehensivePoints[index] || question.points || 10,
-    paperSlot: `${subjectModule.shortName || subjectModule.name} 综合 ${index + 1}`,
-    paperPointsSource: "408_template"
+    paperSlot: `${module.shortName || module.name} 解答 ${index + 1}`,
+    paperPointsSource: "math_template"
   }));
   return [...choiceQuestions, ...comprehensiveQuestions];
 }
 
-function normalized408PointFor(question) {
-  if (question.questionType === "choice") return 2;
-  const subjectModule = SUBJECT_PLAN_408.modules.find((item) => item.id === question.moduleId);
-  if (!subjectModule) return Number(question.points || 10);
-  const comprehensiveTotal = Math.max(0, subjectModule.points - subjectModule.choiceCount * 2);
-  return Math.max(1, Math.round(comprehensiveTotal / Math.max(1, subjectModule.comprehensiveCount)));
+function normalizedMathPointFor(question) {
+  if (question.questionType === "choice") return SUBJECT_PLAN_MATH.choicePoints;
+  const module = SUBJECT_PLAN_MATH.modules.find((item) => item.id === question.moduleId);
+  if (!module) return Number(question.points || 10);
+  const choiceTotal = module.choiceCount * SUBJECT_PLAN_MATH.choicePoints;
+  const comprehensiveTotal = Math.max(0, module.points - choiceTotal);
+  return Math.max(1, Math.round(comprehensiveTotal / Math.max(1, module.comprehensiveCount)));
 }
 
 function originalQuestionKey(question) {
@@ -123,39 +125,39 @@ class PaperAssembler {
     const pool = this.questionBank.questions.filter((question) => sourceMatches(question, sourceScope));
     const selected = [];
 
-    for (const subjectModule of SUBJECT_PLAN_408.modules) {
-      const modulePool = pool.filter((question) => question.moduleId === subjectModule.id);
+    for (const module of SUBJECT_PLAN_MATH.modules) {
+      const modulePool = pool.filter((question) => question.moduleId === module.id);
       const choices = takeRandom(
         modulePool.filter((question) => question.questionType === "choice"),
-        subjectModule.choiceCount,
+        module.choiceCount,
         warnings,
-        `${subjectModule.name}单选`
+        `${module.name}选择题`
       );
       const comprehensive = takeRandom(
         modulePool.filter((question) => question.questionType === "comprehensive"),
-        subjectModule.comprehensiveCount,
+        module.comprehensiveCount,
         warnings,
-        `${subjectModule.name}综合题`
+        `${module.name}解答题`
       );
-      selected.push(...apply408SlotPoints(subjectModule, choices, comprehensive));
+      selected.push(...applyMathSlotPoints(module, choices, comprehensive));
     }
 
     return this.buildPaper({
       mode: "by_real_exam_format",
-      title: "408 真题格式随机卷",
-      description: "按 408 结构生成：40 道单选、7 道综合题，四个板块按真题比例组织。",
+      title: "考研数学结构随机卷",
+      description: "按数学示例结构生成，覆盖高等数学、线性代数和概率统计。",
       questions: selected,
       warnings,
       target: {
-        choiceTotal: SUBJECT_PLAN_408.choiceTotal,
-        comprehensiveTotal: SUBJECT_PLAN_408.comprehensiveTotal,
-        modulePlan: SUBJECT_PLAN_408.modules.map((subjectModule) => ({
-          moduleId: subjectModule.id,
-          moduleName: subjectModule.name,
-          percent: modulePercent(subjectModule.id),
-          points: subjectModule.points,
-          choiceCount: subjectModule.choiceCount,
-          comprehensiveCount: subjectModule.comprehensiveCount
+        choiceTotal: SUBJECT_PLAN_MATH.choiceTotal,
+        comprehensiveTotal: SUBJECT_PLAN_MATH.comprehensiveTotal,
+        modulePlan: SUBJECT_PLAN_MATH.modules.map((module) => ({
+          moduleId: module.id,
+          moduleName: module.name,
+          percent: modulePercent(module.id),
+          points: module.points,
+          choiceCount: module.choiceCount,
+          comprehensiveCount: module.comprehensiveCount
         }))
       }
     });
@@ -181,31 +183,31 @@ class PaperAssembler {
     const selected = [];
 
     if (mode === "random_by_minutes") {
-      const minutes = clampNumber(payload.minutes, 45, 5, SUBJECT_PLAN_408.totalMinutes);
-      const targetPoints = Math.max(2, Math.round((minutes / SUBJECT_PLAN_408.totalMinutes) * SUBJECT_PLAN_408.totalPoints));
-      for (const subjectModule of SUBJECT_PLAN_408.modules) {
-        const moduleTarget = Math.max(2, Math.round(targetPoints * (subjectModule.points / SUBJECT_PLAN_408.totalPoints)));
-        const modulePool = shuffle(wrongQuestions.filter((question) => question.moduleId === subjectModule.id));
+      const minutes = clampNumber(payload.minutes, 45, 5, SUBJECT_PLAN_MATH.totalMinutes);
+      const targetPoints = Math.max(5, Math.round((minutes / SUBJECT_PLAN_MATH.totalMinutes) * SUBJECT_PLAN_MATH.totalPoints));
+      for (const module of SUBJECT_PLAN_MATH.modules) {
+        const moduleTarget = Math.max(5, Math.round(targetPoints * (module.points / SUBJECT_PLAN_MATH.totalPoints)));
+        const modulePool = shuffle(wrongQuestions.filter((question) => question.moduleId === module.id));
         let points = 0;
         for (const question of modulePool) {
           if (points >= moduleTarget) break;
-          const normalizedPoints = normalized408PointFor(question);
+          const normalizedPoints = normalizedMathPointFor(question);
           selected.push({
             ...question,
             originalPoints: question.points,
             points: normalizedPoints,
-            paperPointsSource: "408_time_conversion"
+            paperPointsSource: "math_time_conversion"
           });
           points += normalizedPoints;
         }
         if (points < moduleTarget) {
-          warnings.push(`${subjectModule.name}错题目标约 ${moduleTarget} 分，当前只能组到 ${points} 分。`);
+          warnings.push(`${module.name}错题目标约 ${moduleTarget} 分，当前只能组到 ${points} 分。`);
         }
       }
       return this.buildPaper({
         mode: "by_wrong_full",
-        title: `${minutes} 分钟错题随机卷`,
-        description: "按 408 板块分值占比换算预计时长，并从错题库随机抽取。",
+        title: `${minutes} 分钟数学错题随机卷`,
+        description: "按数学板块分值占比换算预计时长，并从错题库随机抽取。",
         questions: selected,
         warnings,
         target: {
@@ -216,32 +218,32 @@ class PaperAssembler {
       });
     }
 
-    for (const subjectModule of SUBJECT_PLAN_408.modules) {
-      const modulePool = wrongQuestions.filter((question) => question.moduleId === subjectModule.id);
+    for (const module of SUBJECT_PLAN_MATH.modules) {
+      const modulePool = wrongQuestions.filter((question) => question.moduleId === module.id);
       const choices = takeRandom(
         modulePool.filter((question) => question.questionType === "choice"),
-        subjectModule.choiceCount,
+        module.choiceCount,
         warnings,
-        `${subjectModule.name}错题单选`
+        `${module.name}错题选择题`
       );
       const comprehensive = takeRandom(
         modulePool.filter((question) => question.questionType === "comprehensive"),
-        subjectModule.comprehensiveCount,
+        module.comprehensiveCount,
         warnings,
-        `${subjectModule.name}错题综合题`
+        `${module.name}错题解答题`
       );
-      selected.push(...apply408SlotPoints(subjectModule, choices, comprehensive));
+      selected.push(...applyMathSlotPoints(module, choices, comprehensive));
     }
 
     return this.buildPaper({
       mode: "by_wrong_full",
-      title: "408 完整错题卷",
-      description: "按 408 真题题型数量抽取错题，要求各板块错题库都有对应题目。",
+      title: "数学完整错题卷",
+      description: "按数学示例卷题型数量抽取错题，要求各板块错题库有对应题目。",
       questions: selected,
       warnings,
       target: {
-        choiceTotal: SUBJECT_PLAN_408.choiceTotal,
-        comprehensiveTotal: SUBJECT_PLAN_408.comprehensiveTotal
+        choiceTotal: SUBJECT_PLAN_MATH.choiceTotal,
+        comprehensiveTotal: SUBJECT_PLAN_MATH.comprehensiveTotal
       }
     });
   }
@@ -271,7 +273,7 @@ class PaperAssembler {
     return this.buildPaper({
       mode: "by_type",
       title: "按题型专项卷",
-      description: "按模块、题型和关键词筛选，默认数量与 408 真题对应题型保持一致。",
+      description: "按数学板块、题型和关键词筛选，默认数量与数学示例卷对应题型一致。",
       questions: selected,
       warnings,
       target: {
@@ -311,37 +313,35 @@ class PaperAssembler {
 
   assembleOriginalExam(payload = {}) {
     const warnings = [];
+    const sourcePath = String(payload.source_path || "").replace(/\\/g, "/");
     const year = Number(payload.year);
     const selected = uniqueOriginalQuestions(this.questionBank.questions
-      .filter((question) => question.sourceKind === "exam408" && Number(question.examYear) === year))
+      .filter((question) => {
+        if (question.sourceKind !== "examMath") return false;
+        if (sourcePath) return question.sourcePath === sourcePath;
+        return Number(question.examYear) === year;
+      }))
       .sort((left, right) => Number(left.number || 0) - Number(right.number || 0));
 
     if (!selected.length) {
-      warnings.push(`${year || ""} 年原卷暂未解析出可练习题目。`);
+      warnings.push(`${year || ""} 年数学示例卷暂未解析出可练习题目。`);
     }
     const choiceCount = selected.filter((question) => question.questionType === "choice").length;
     const comprehensiveCount = selected.filter((question) => question.questionType === "comprehensive").length;
-    const supplementalCount = selected.filter((question) => question.supplemental).length;
-    const placeholderCount = selected.filter((question) => question.placeholder).length;
-    if (selected.length && (choiceCount < SUBJECT_PLAN_408.choiceTotal || comprehensiveCount < SUBJECT_PLAN_408.comprehensiveTotal)) {
-      warnings.push(`该年 Markdown 当前解析到 ${choiceCount} 道单选、${comprehensiveCount} 道综合题，可能不是完整原卷。`);
-    }
-    if (supplementalCount > 0) {
-      warnings.push(`其中 ${supplementalCount} 道题由真题解析补录，原卷 PDF 的题干文字层仍需 OCR 才能完全恢复。`);
-    }
-    if (placeholderCount > 0) {
-      warnings.push(`其中 ${placeholderCount} 道题没有可提取文字，已用 PDF/OCR 占位补齐题号。`);
+    if (selected.length && (choiceCount < SUBJECT_PLAN_MATH.choiceTotal || comprehensiveCount < SUBJECT_PLAN_MATH.comprehensiveTotal)) {
+      warnings.push(`该 Markdown 当前解析到 ${choiceCount} 道选择题、${comprehensiveCount} 道解答题，可能不是完整示例卷。`);
     }
 
     return this.buildPaper({
       mode: "by_original_exam",
-      title: `${year}年计算机408统考真题`,
-      description: "来自 408 计算机原始真题 Markdown，按原题顺序进入做题。",
+      title: sourcePath ? `${path.basename(sourcePath, ".md")} 练习卷` : `${year}年考研数学示例卷`,
+      description: sourcePath ? "来自系统题目资料，按解析顺序进入做题。" : "来自数学示例 Markdown，按原题顺序进入做题。",
       questions: selected,
       warnings,
       target: {
         year,
-        source: "2009-2025计算机408统考真题"
+        sourcePath,
+        source: sourcePath ? "系统题目资料" : "考研数学示例"
       }
     });
   }
@@ -354,7 +354,7 @@ class PaperAssembler {
       .sort((left, right) => Number(left.number || 0) - Number(right.number || 0));
 
     if (!selected.length) {
-      warnings.push("该上传资料暂未解析出可练习题目。PDF 需要先完成 OCR/解析。");
+      warnings.push("该上传资料暂未解析出可练习题目。PDF 需要先完成 OCR/Markdown 转换。");
     }
 
     return this.buildPaper({
@@ -369,15 +369,15 @@ class PaperAssembler {
 
   templateCountForType(moduleId, questionType) {
     if (moduleId === "all") {
-      if (questionType === "choice") return SUBJECT_PLAN_408.choiceTotal;
-      if (questionType === "comprehensive") return SUBJECT_PLAN_408.comprehensiveTotal;
-      return SUBJECT_PLAN_408.choiceTotal + SUBJECT_PLAN_408.comprehensiveTotal;
+      if (questionType === "choice") return SUBJECT_PLAN_MATH.choiceTotal;
+      if (questionType === "comprehensive") return SUBJECT_PLAN_MATH.comprehensiveTotal;
+      return SUBJECT_PLAN_MATH.choiceTotal + SUBJECT_PLAN_MATH.comprehensiveTotal;
     }
-    const subjectModule = SUBJECT_PLAN_408.modules.find((item) => item.id === moduleId);
-    if (!subjectModule) return 8;
-    if (questionType === "choice") return subjectModule.choiceCount;
-    if (questionType === "comprehensive") return subjectModule.comprehensiveCount;
-    return subjectModule.choiceCount + subjectModule.comprehensiveCount;
+    const module = SUBJECT_PLAN_MATH.modules.find((item) => item.id === moduleId);
+    if (!module) return 8;
+    if (questionType === "choice") return module.choiceCount;
+    if (questionType === "comprehensive") return module.comprehensiveCount;
+    return module.choiceCount + module.comprehensiveCount;
   }
 
   buildPaper({ mode, title, description, questions, warnings, target }) {
@@ -395,18 +395,18 @@ class PaperAssembler {
       target,
       summary,
       warnings,
-      modules: SUBJECT_PLAN_408.modules,
+      modules: SUBJECT_PLAN_MATH.modules,
       questions: normalized
     };
   }
 
   questionTypeTree() {
     const grouped = groupBy(this.questionBank.questions, (question) => question.moduleId);
-    return SUBJECT_PLAN_408.modules.map((subjectModule) => {
-      const questions = grouped[subjectModule.id] || [];
+    return SUBJECT_PLAN_MATH.modules.map((module) => {
+      const questions = grouped[module.id] || [];
       return {
-        ...subjectModule,
-        percent: modulePercent(subjectModule.id),
+        ...module,
+        percent: modulePercent(module.id),
         counts: summarizeQuestions(questions),
         questionTypes: Object.entries(groupBy(questions, (question) => question.questionType)).map(([type, items]) => ({
           type,
@@ -421,20 +421,18 @@ class PaperAssembler {
   originalPapers() {
     const papers = new Map();
     for (const file of this.questionBank.files || []) {
-      const match = path.basename(file).match(/(20\d{2})年计算机408统考真题\.md$/);
+      const match = path.basename(file).match(/((?:19|20)\d{2})/);
       if (!match) continue;
       const year = Number(match[1]);
-      papers.set(year, {
+      papers.set(`year:${year}`, {
         year,
-        subjectId: "computer408",
-        subjectName: "计算机 408",
-        title: `${year}年计算机408统考真题`,
+        subjectId: "mathKaoyan",
+        subjectName: "考研数学",
+        title: `${year}年考研数学示例卷`,
         sourcePath: path.relative(this.questionBank.dataRoot, file).replace(/\\/g, "/"),
         questionCount: 0,
         choiceCount: 0,
         comprehensiveCount: 0,
-        supplementalCount: 0,
-        placeholderCount: 0,
         totalPoints: 0,
         available: false,
         completeness: "未解析"
@@ -442,44 +440,37 @@ class PaperAssembler {
     }
 
     for (const question of uniqueOriginalQuestions(this.questionBank.questions)) {
-      if (question.sourceKind !== "exam408" || !question.examYear) continue;
-      if (!papers.has(question.examYear)) {
-        papers.set(question.examYear, {
+      if (question.sourceKind !== "examMath") continue;
+      const key = question.examYear ? `year:${question.examYear}` : `source:${question.sourcePath}`;
+      if (!papers.has(key)) {
+        papers.set(key, {
           year: question.examYear,
-          subjectId: "computer408",
-          subjectName: "计算机 408",
+          subjectId: "mathKaoyan",
+          subjectName: "考研数学",
           title: question.sourceTitle,
           sourcePath: question.sourcePath,
           questionCount: 0,
           choiceCount: 0,
           comprehensiveCount: 0,
-          supplementalCount: 0,
-          placeholderCount: 0,
           totalPoints: 0,
           available: false,
           completeness: "未解析"
         });
       }
-      const paper = papers.get(question.examYear);
+      const paper = papers.get(key);
       paper.questionCount += 1;
       paper.totalPoints += Number(question.points || 0);
       if (question.questionType === "choice") paper.choiceCount += 1;
       if (question.questionType === "comprehensive") paper.comprehensiveCount += 1;
-      if (question.supplemental) paper.supplementalCount += 1;
-      if (question.placeholder) paper.placeholderCount += 1;
       paper.available = true;
     }
 
     return [...papers.values()].map((paper) => {
       const complete =
-        paper.choiceCount >= SUBJECT_PLAN_408.choiceTotal &&
-        paper.comprehensiveCount >= SUBJECT_PLAN_408.comprehensiveTotal;
+        paper.choiceCount >= SUBJECT_PLAN_MATH.choiceTotal &&
+        paper.comprehensiveCount >= SUBJECT_PLAN_MATH.comprehensiveTotal;
       let completeness = "暂不可练习";
-      if (complete && paper.placeholderCount > 0) {
-        completeness = "已补齐题号，部分题干需 OCR/PDF";
-      } else if (complete && paper.supplementalCount > 0) {
-        completeness = "已补齐题号，部分题干来自解析";
-      } else if (complete) {
+      if (complete) {
         completeness = "可完整练习";
       } else if (paper.available) {
         completeness = "可练习，题目不完整";
@@ -488,7 +479,10 @@ class PaperAssembler {
         ...paper,
         completeness
       };
-    }).sort((left, right) => right.year - left.year);
+    }).sort((left, right) => {
+      const yearDiff = Number(right.year || 0) - Number(left.year || 0);
+      return yearDiff || String(left.title || "").localeCompare(String(right.title || ""), "zh-Hans-CN");
+    });
   }
 }
 

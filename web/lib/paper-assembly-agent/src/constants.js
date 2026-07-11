@@ -2,99 +2,89 @@ const DEFAULT_USER_ID = "local-user";
 
 const SUBJECTS = [
   {
-    id: "computer408",
-    name: "计算机 408",
-    shortName: "408",
-    description: "计算机学科专业基础综合，包含数据结构、组成原理、操作系统、计算机网络。",
+    id: "mathKaoyan",
+    name: "考研数学",
+    shortName: "数学",
+    description: "以高等数学、线性代数、概率统计为核心的数学练习与组卷示例。",
     available: true
   }
 ];
 
-const SUBJECT_PLAN_408 = {
-  subject: "408计算机",
+const SUBJECT_PLAN_MATH = {
+  subject: "考研数学",
   totalPoints: 150,
   totalMinutes: 180,
-  choiceTotal: 40,
-  comprehensiveTotal: 7,
+  choiceTotal: 10,
+  comprehensiveTotal: 10,
+  choicePoints: 5,
   modules: [
     {
-      id: "data_structure",
-      name: "数据结构",
-      shortName: "数据结构",
-      points: 45,
-      choiceCount: 10,
+      id: "advanced_math",
+      name: "高等数学",
+      shortName: "高数",
+      points: 84,
+      choiceCount: 5,
+      comprehensiveCount: 6,
+      choiceRange: [1, 5],
+      comprehensiveNumbers: [11, 12, 13, 14, 15, 16],
+      explanation: "函数、极限、导数、积分、级数和微分方程，重在运算与综合应用。"
+    },
+    {
+      id: "linear_algebra",
+      name: "线性代数",
+      shortName: "线代",
+      points: 33,
+      choiceCount: 3,
       comprehensiveCount: 2,
-      choiceRange: [1, 10],
-      comprehensiveNumbers: [41, 42],
-      explanation: "线性表、树图、查找排序，重在结构选择和算法设计。"
+      choiceRange: [6, 8],
+      comprehensiveNumbers: [17, 18],
+      explanation: "行列式、矩阵、向量、线性方程组、特征值与二次型。"
     },
     {
-      id: "computer_organization",
-      name: "计算机组成原理",
-      shortName: "组成原理",
-      points: 45,
-      choiceCount: 12,
-      comprehensiveCount: 3,
-      choiceRange: [11, 22],
-      comprehensiveNumbers: [43, 44, 45],
-      explanation: "数据表示、存储层次、指令与 CPU，重在硬件机制推理。"
-    },
-    {
-      id: "operating_system",
-      name: "操作系统",
-      shortName: "操作系统",
-      points: 35,
-      choiceCount: 10,
-      comprehensiveCount: 1,
-      choiceRange: [23, 32],
-      comprehensiveNumbers: [46],
-      explanation: "进程、内存、文件与 I/O，重在状态变化和资源管理。"
-    },
-    {
-      id: "computer_network",
-      name: "计算机网络",
-      shortName: "计算机网络",
-      points: 25,
-      choiceCount: 8,
-      comprehensiveCount: 1,
-      choiceRange: [33, 40],
-      comprehensiveNumbers: [47],
-      explanation: "协议、传输、路由与应用层，重在分层和时延计算。"
+      id: "probability",
+      name: "概率统计",
+      shortName: "概率",
+      points: 33,
+      choiceCount: 2,
+      comprehensiveCount: 2,
+      choiceRange: [9, 10],
+      comprehensiveNumbers: [19, 20],
+      explanation: "随机事件、随机变量、分布、数字特征和参数估计。"
     }
   ]
 };
 
 const QUESTION_TYPE_LABELS = {
-  choice: "单项选择题",
-  comprehensive: "综合应用题"
+  choice: "选择题",
+  comprehensive: "解答题"
 };
 
 const SOURCE_SCOPES = {
-  all: "全部 Markdown 数据",
-  exam408: "仅 408 真题",
-  practice: "仅练习题"
+  all: "全部数学 Markdown 数据",
+  examMath: "仅数学示例卷",
+  practice: "仅数学练习题"
 };
 
 function moduleById(id) {
-  return SUBJECT_PLAN_408.modules.find((item) => item.id === id);
+  return SUBJECT_PLAN_MATH.modules.find((item) => item.id === id);
 }
 
-function moduleFor408QuestionNumber(number) {
+function moduleForMathQuestionNumber(number) {
   const normalized = Number(number);
   if (!Number.isFinite(normalized)) return null;
-  return SUBJECT_PLAN_408.modules.find((subjectModule) => {
-    const [start, end] = subjectModule.choiceRange;
+  return SUBJECT_PLAN_MATH.modules.find((module) => {
+    const [start, end] = module.choiceRange;
     return (
       (normalized >= start && normalized <= end) ||
-      subjectModule.comprehensiveNumbers.includes(normalized)
+      module.comprehensiveNumbers.includes(normalized)
     );
   }) || null;
 }
 
 function modulePercent(moduleId) {
-  const subjectModule = moduleById(moduleId);
-  if (!subjectModule) return 0;
-  return Math.round((subjectModule.points / SUBJECT_PLAN_408.totalPoints) * 1000) / 10;
+  const module = moduleById(moduleId);
+  if (!module) return 0;
+  return Math.round((module.points / SUBJECT_PLAN_MATH.totalPoints) * 1000) / 10;
 }
 
 module.exports = {
@@ -102,8 +92,8 @@ module.exports = {
   QUESTION_TYPE_LABELS,
   SOURCE_SCOPES,
   SUBJECTS,
-  SUBJECT_PLAN_408,
+  SUBJECT_PLAN_MATH,
   moduleById,
-  moduleFor408QuestionNumber,
+  moduleForMathQuestionNumber,
   modulePercent
 };

@@ -7,6 +7,7 @@ const state = {
   collapsedOriginalSubjects: {},
   modules: [],
   typeTree: [],
+  conversion: null,
   originalPapers: [],
   uploadedOriginals: [],
   originalSearch: "",
@@ -27,12 +28,12 @@ const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 const API_BASE = "/api/paper-assembly";
 
 const SUBJECT_TYPE_CONFIG = {
-  computer408: {
-    modules: "408",
+  mathKaoyan: {
+    modules: "math",
     questionTypes: [
-      { value: "choice", label: "单项选择题" },
-      { value: "comprehensive", label: "综合应用题" },
-      { value: "all", label: "全部 408 题型" }
+      { value: "choice", label: "选择题" },
+      { value: "comprehensive", label: "解答题" },
+      { value: "all", label: "全部数学题型" }
     ]
   }
 };
@@ -91,14 +92,14 @@ function originalPaperCountsBySubject() {
 }
 
 function selectedSubjectConfig() {
-  return SUBJECT_TYPE_CONFIG[state.selectedSubjectId] || SUBJECT_TYPE_CONFIG.computer408;
+  return SUBJECT_TYPE_CONFIG[state.selectedSubjectId] || SUBJECT_TYPE_CONFIG.mathKaoyan;
 }
 
 function renderTypeControls() {
   const config = selectedSubjectConfig();
   const moduleSelect = $("#moduleSelect");
   if (moduleSelect) {
-    const options = config.modules === "408" ? state.modules : [];
+    const options = config.modules === "math" ? state.modules : [];
     moduleSelect.innerHTML = `
       <option value="all">全部板块</option>
       ${options.map((module) => `<option value="${module.id}">${module.name}</option>`).join("")}
@@ -301,12 +302,41 @@ function renderOriginalPapers() {
               <span class="tag">${paper.totalPoints} 分</span>
             </div>
           </div>
-          <button class="primary-button" data-action="start-original" data-year="${paper.year}" ${paper.available ? "" : "disabled"}>
+          <button class="primary-button" data-action="start-original" data-year="${paper.year || ""}" data-source-path="${escapeHtml(paper.sourcePath || "")}" ${paper.available ? "" : "disabled"}>
             开始做题
           </button>
         </article>
       `).join("")}
     </div>
+  `;
+}
+
+function renderConversionPanel() {
+  const panel = $("#conversionPanel");
+  if (!panel) return;
+  const conversion = state.conversion;
+  if (!conversion) {
+    panel.innerHTML = `<p class="upload-status">正在读取 PDF 转换环境...</p>`;
+    return;
+  }
+  const runtime = conversion.runtime || {};
+  const system = conversion.system || {};
+  const ready = Boolean(runtime.ok);
+  const running = system.conversionStatus === "running" || system.status === "running";
+  panel.innerHTML = `
+    <div class="conversion-copy">
+      <h4>真题 PDF 转 Markdown</h4>
+      <p>${escapeHtml(runtime.message || "检测转换环境中")}</p>
+      <div class="tag-row">
+        <span class="tag">${ready ? "环境就绪" : "缺少环境"}</span>
+        <span class="tag">PDF ${conversion.pendingSystemPdfCount || 0} 个</span>
+        <span class="tag">${escapeHtml(system.message || "尚未转换")}</span>
+      </div>
+      ${conversion.lastLog ? `<p class="upload-note">${escapeHtml(conversion.lastLog)}</p>` : ""}
+    </div>
+    <button class="primary-button" type="button" data-action="convert-system-exams" ${ready && !running ? "" : "disabled"}>
+      ${running ? "转换中" : "转换系统真题"}
+    </button>
   `;
 }
 
@@ -326,7 +356,8 @@ function renderUploadedOriginals() {
             <p>${item.kind === "pdf" ? escapeHtml(item.sourcePath || "未生成可练习题库") : escapeHtml(item.sourcePath)}</p>
             <div class="tag-row">
               ${item.subject ? `<span class="tag">${escapeHtml(item.subject)}</span>` : ""}
-              <span class="tag">${escapeHtml(item.status)}</span>
+              <span class="tag">${escapeHtml(item.message || item.status || "")}</span>
+              ${item.conversionStatus ? `<span class="tag">${escapeHtml(item.conversionStatus)}</span>` : ""}
               <span class="tag">${escapeHtml(item.ext || "")}</span>
               <span class="tag">${item.questionCount || 0} 题</span>
             </div>
@@ -349,7 +380,7 @@ function renderUploadedOriginals() {
               </label>
               <label>
                 科目/分类
-                <input name="subject" value="${escapeHtml(item.subject || "")}" placeholder="例如 计算机408、英语、数学">
+                <input name="subject" value="${escapeHtml(item.subject || "")}" placeholder="例如 考研数学、英语、政治">
               </label>
               <label>
                 备注
@@ -371,7 +402,7 @@ function selectedSubjectPayload() {
   const subject = state.subjects.find((item) => item.id === state.selectedSubjectId) || state.subjects[0];
   return {
     subject_id: subject?.id || state.selectedSubjectId,
-    subject_name: subject?.name || "计算机 408"
+    subject_name: subject?.name || "考研数学"
   };
 }
 
@@ -465,7 +496,7 @@ function renderPaper(paper) {
 function renderQuestion(question) {
   const annotation = state.annotations[question.id] || {};
   const choices = question.choices && question.choices.length
-    ? `<ul class="choice-list">${question.choices.map((choice) => `<li><strong>${choice.label}.</strong> ${escapeHtml(choice.text)}</li>`).join("")}</ul>`
+    ? `<ul class="choice-list">${question.choices.map((choice) => `<li><strong>${choice.label}.</strong> ${renderRichText(choice.text)}</li>`).join("")}</ul>`
     : "";
   const body = question.choices && question.choices.length ? question.stem : question.rawText;
   const starText = annotation.star ? "取消重点" : "重点";
@@ -481,7 +512,7 @@ function renderQuestion(question) {
           <span class="tag">${question.sourceTitle}</span>
         </div>
       </div>
-      <div class="question-body">${escapeHtml(body)}</div>
+      <div class="question-body">${renderRichText(body)}</div>
       ${choices}
       <div class="question-actions">
         <button class="mini-button" data-action="highlight">标黄</button>
@@ -567,8 +598,8 @@ function wrongSubjectInfo(item) {
   const subjectName = question.subject || question.subjectName || question.subject_name || "";
   const sourceKind = question.sourceKind || "";
   const sourceTitle = question.sourceTitle || "";
-  if (subjectName.includes("408") || sourceKind === "exam408") {
-    return { id: "computer408", name: "计算机 408" };
+  if (subjectName.includes("数学") || sourceKind === "examMath") {
+    return { id: "mathKaoyan", name: "考研数学" };
   }
   if (sourceKind === "upload") {
     return { id: "upload", name: subjectName && subjectName !== "用户上传" ? subjectName : "我的上传" };
@@ -637,8 +668,8 @@ function wrongSubjects() {
     });
   }
   return [...subjects.values()].sort((left, right) => {
-    if (left.id === "computer408") return -1;
-    if (right.id === "computer408") return 1;
+    if (left.id === "mathKaoyan") return -1;
+    if (right.id === "mathKaoyan") return 1;
     return left.name.localeCompare(right.name, "zh-Hans-CN");
   });
 }
@@ -729,6 +760,69 @@ function escapeHtml(value) {
     .replaceAll('"', "&quot;");
 }
 
+function renderRichText(value) {
+  const source = String(value || "");
+  const blocks = [];
+  let text = source
+    .replace(/\r\n/g, "\n")
+    .replace(/\\\[((?:.|\n)*?)\\\]/g, (_, formula) => {
+      blocks.push(`<div class="math-block">${renderFormula(formula)}</div>`);
+      return `@@MATH_BLOCK_${blocks.length - 1}@@`;
+    })
+    .replace(/\$\$((?:.|\n)*?)\$\$/g, (_, formula) => {
+      blocks.push(`<div class="math-block">${renderFormula(formula)}</div>`);
+      return `@@MATH_BLOCK_${blocks.length - 1}@@`;
+    });
+  let html = escapeHtml(text)
+    .replace(/\$([^$\n]+?)\$/g, (_, formula) => `<span class="math-inline">${renderFormula(formula)}</span>`)
+    .replace(/\n{2,}/g, "<br><br>")
+    .replace(/\n/g, "<br>");
+  blocks.forEach((block, index) => {
+    html = html.replace(`@@MATH_BLOCK_${index}@@`, block);
+  });
+  return html;
+}
+
+function renderFormula(value) {
+  let formula = escapeHtml(value).replace(/\s+/g, " ").trim();
+  formula = formula
+    .replace(/\\displaystyle\s*/g, "")
+    .replace(/\\scriptstyle\s*/g, "")
+    .replace(/\\operatorname\*\s*\{\s*lim\s*\}/g, "lim")
+    .replace(/\\operatorname\s*\{\s*([^}]+)\s*\}/g, "$1")
+    .replace(/\\mathrm\s*\{\s*([^}]+)\s*\}/g, "$1")
+    .replace(/\\vec\s*\{\s*([^}]+)\s*\}/g, "<span class=\"over-arrow\">$1</span>")
+    .replace(/\\underline\s*\{\s*([^{}]+)\s*\}/g, "<u>$1</u>")
+    .replace(/\\underbrace\s*\{\s*([^{}]+)\s*\}/g, "<span class=\"underbrace\">$1</span>")
+    .replace(/\\sqrt\s*\{\s*([^{}]+)\s*\}/g, "√($1)")
+    .replace(/\\frac\s*\{\s*([^{}]+)\s*\}\s*\{\s*([^{}]+)\s*\}/g, "<span class=\"fraction\"><span>$1</span><span>$2</span></span>")
+    .replace(/\\begin\s*\{array\}\s*\{[^}]*\}/g, "<span class=\"matrix\">")
+    .replace(/\\end\s*\{array\}/g, "</span>")
+    .replace(/\\\\/g, "<br>")
+    .replace(/&amp;/g, " ")
+    .replace(/\\iint/g, "∬")
+    .replace(/\\int/g, "∫")
+    .replace(/\\sum/g, "∑")
+    .replace(/\\lim/g, "lim")
+    .replace(/\\to/g, "→")
+    .replace(/\\infty/g, "∞")
+    .replace(/\\cdots/g, "⋯")
+    .replace(/\\ln/g, "ln")
+    .replace(/\\sin/g, "sin")
+    .replace(/\\cos/g, "cos")
+    .replace(/\\pi/g, "π")
+    .replace(/\\nu/g, "ν")
+    .replace(/\\prime/g, "′")
+    .replace(/\\quad/g, " ")
+    .replace(/\\left|\\right/g, "")
+    .replace(/\\[a-zA-Z]+/g, "");
+  return formula
+    .replace(/\^\s*\{\s*([^{}]+)\s*\}/g, "<sup>$1</sup>")
+    .replace(/_\s*\{\s*([^{}]+)\s*\}/g, "<sub>$1</sub>")
+    .replace(/\^\s*([A-Za-z0-9+-])/g, "<sup>$1</sup>")
+    .replace(/_\s*([A-Za-z0-9+-])/g, "<sub>$1</sub>");
+}
+
 async function assemble(payload, successMessage = "试卷已生成", sourceView = "view-assemble") {
   const paper = await api("/api/paper/assemble", {
     method: "POST",
@@ -774,6 +868,21 @@ async function refreshUploadedOriginals() {
   const uploaded = await api("/api/uploads");
   state.uploadedOriginals = uploaded.items || [];
   renderUploadedOriginals();
+}
+
+async function refreshConversionStatus() {
+  state.conversion = await api("/api/conversion/status");
+  renderConversionPanel();
+}
+
+async function convertSystemExams() {
+  const result = await api("/api/conversion/system-exams", { method: "POST", body: "{}" });
+  await refreshConversionStatus();
+  if (result.status === "missing_runtime") {
+    toast("缺少 MinerU");
+    return;
+  }
+  toast("系统真题转换已开始");
 }
 
 async function saveUploadEdit(form) {
@@ -835,6 +944,7 @@ function bindEvents() {
     if (!button) return;
     if (button.dataset.action === "open-system-bank") {
       showBankStep("systemBankView");
+      await refreshConversionStatus();
     }
     if (button.dataset.action === "open-uploaded-bank") {
       showBankStep("uploadedBankView");
@@ -853,6 +963,9 @@ function bindEvents() {
     }
     if (button.dataset.action === "delete-upload") {
       await deleteUploadedOriginal(button.dataset.uploadId);
+    }
+    if (button.dataset.action === "convert-system-exams") {
+      await convertSystemExams();
     }
     if (button.dataset.action === "start-uploaded") {
       if (!button.dataset.sourcePath || button.disabled) return;
@@ -1036,19 +1149,24 @@ function bindEvents() {
   $("#originalList").addEventListener("click", async (event) => {
     const button = event.target.closest("[data-action='start-original']");
     if (!button || button.disabled) return;
-    await assemble({ paper_mode: "by_original_exam", year: button.dataset.year }, "已打开原题试卷", "view-original");
+    await assemble({
+      paper_mode: "by_original_exam",
+      year: button.dataset.year,
+      source_path: button.dataset.sourcePath
+    }, "已打开原题试卷", "view-original");
   });
 }
 
 async function init() {
   try {
-    const [health, subjects, modules, tree, originalPapers, uploadedOriginals, annotationBundle] = await Promise.all([
+    const [health, subjects, modules, tree, originalPapers, uploadedOriginals, conversion, annotationBundle] = await Promise.all([
       api("/api/health"),
       api("/api/subjects"),
       api("/api/modules"),
       api("/api/paper/question-types"),
       api("/api/papers/original"),
       api("/api/uploads"),
+      api("/api/conversion/status"),
       api("/api/annotations/items")
     ]);
     state.health = health;
@@ -1057,6 +1175,7 @@ async function init() {
     state.typeTree = tree.modules || [];
     state.originalPapers = originalPapers.items || [];
     state.uploadedOriginals = uploadedOriginals.items || [];
+    state.conversion = conversion;
     state.annotations = annotationBundle.annotations || {};
     state.annotationItems = annotationBundle.items || [];
     if (state.selectedSubjectId && !state.subjects.some((subject) => subject.id === state.selectedSubjectId)) {
@@ -1069,6 +1188,7 @@ async function init() {
     renderOriginalSubjects();
     renderTypeTree();
     renderOriginalPapers();
+    renderConversionPanel();
     renderUploadedOriginals();
     renderAnnotationList();
     await refreshWrong();
