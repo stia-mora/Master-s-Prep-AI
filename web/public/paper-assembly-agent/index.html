@@ -4,7 +4,7 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>题型组卷 Agent</title>
-    <link rel="stylesheet" href="/paper-assembly-agent/styles.css">
+    <link rel="stylesheet" href="/styles.css?v=20260606-math">
   </head>
   <body>
     <main class="shell">
@@ -22,7 +22,7 @@
             <span class="brand-mark">C</span>
             <span>
               <strong>题型组卷 Agent</strong>
-              <small>408 结构、错题重刷、题型专项</small>
+              <small>数学结构、错题重刷、题型专项</small>
             </span>
           </div>
           <nav class="nav" aria-label="功能">
@@ -45,7 +45,7 @@
           <div class="entry-grid">
             <button class="entry-card" type="button" data-action="open-system-assemble">
               <strong>系统题库</strong>
-              <span>使用内置 408 原卷、错题库和题型结构组卷。</span>
+              <span>使用内置数学示例卷、错题库和题型结构组卷。</span>
             </button>
             <button class="entry-card" type="button" data-action="open-upload-assemble">
               <strong>上传资料</strong>
@@ -86,12 +86,12 @@
                   题源范围
                   <select name="source_scope">
                     <option value="all">全部 Markdown 数据</option>
-                    <option value="exam408">仅 408 真题</option>
+                    <option value="examMath">仅数学示例卷</option>
                     <option value="practice">仅练习题</option>
                   </select>
                 </label>
                 <div class="real-mode-panel is-visible" data-real-panel="whole">
-                  <p class="form-note">按 408 真题结构生成 40 道单选、7 道综合题。</p>
+                  <p class="form-note">按数学示例结构生成选择题和解答题。</p>
                 </div>
                 <div class="real-mode-panel" data-real-panel="type">
                   <div class="form-grid">
@@ -129,7 +129,7 @@
               <form class="assemble-panel" id="wrongPaperForm" data-panel="wrong">
                 <div class="panel-title compact">
                   <h3>按错题组卷</h3>
-                  <p>按 408 板块分值比例换算，从错题库生成重刷卷。</p>
+                  <p>按数学板块分值比例换算，从错题库生成重刷卷。</p>
                 </div>
                 <fieldset class="segmented">
                   <label><input type="radio" name="wrong_mode" value="same_count" checked> 题目数量一致</label>
@@ -209,7 +209,7 @@
           <div class="entry-grid">
             <button class="entry-card" type="button" data-action="open-system-bank">
               <strong>系统自带原题</strong>
-              <span>浏览内置 408 原卷，按年份直接进入当前试卷。</span>
+              <span>浏览内置数学示例卷，按年份直接进入当前试卷。</span>
             </button>
             <button class="entry-card" type="button" data-action="open-uploaded-bank">
               <strong>我的上传</strong>
@@ -228,8 +228,9 @@
           </div>
           <label class="search-field bank-search">
             搜索原题
-            <input id="originalSearch" type="search" placeholder="输入年份或科目，例如 2024、计算机">
+            <input id="originalSearch" type="search" placeholder="输入年份或科目，例如 2026、数学">
           </label>
+          <div class="conversion-panel" id="conversionPanel"></div>
           <div class="section-head">
             <h3>选择科目</h3>
             <p>先勾选一个科目，再浏览对应原题。</p>
@@ -253,6 +254,6 @@
     </main>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
-    <script src="/paper-assembly-agent/app.js"></script>
+    <script src="/app.js?v=20260606-math"></script>
   </body>
 </html>
