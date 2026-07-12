@@ -490,10 +490,7 @@ class TurnRuntimeManager:
             if seq <= last_seq:
                 continue
             last_seq = seq
-            if execution is None:
-                yield item
-            else:
-                queue.put_nowait(item)
+            yield item
 
         turn = await self.store.get_turn(turn_id)
         if execution is None:
