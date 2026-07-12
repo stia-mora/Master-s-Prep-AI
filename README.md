@@ -106,6 +106,13 @@ master-prep-ai run chat "解释傅里叶变换" -l zh
 master-prep-ai serve --port 8001
 ```
 
+Provider auth (`openai-codex` OAuth login; `github-copilot` validates an existing Copilot auth session):
+
+```powershell
+master-prep-ai provider login openai-codex
+master-prep-ai provider login github-copilot
+```
+
 ## 数据库与内容库
 
 考研高数内容库默认读取项目内的相对路径：
