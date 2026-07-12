@@ -209,12 +209,12 @@ function distributePoints(total, count) {
 function pointsForQuestion(source, number, rawText, questionType) {
   if (isMathSubject(source)) {
     if (questionType === "choice") return SUBJECT_PLAN_MATH.choicePoints;
-    const module = moduleForMathQuestionNumber(number);
-    if (!module) return 10;
-    const choicePoints = module.choiceCount * SUBJECT_PLAN_MATH.choicePoints;
-    const comprehensiveTotal = Math.max(0, module.points - choicePoints);
-    const slotIndex = module.comprehensiveNumbers.indexOf(Number(number));
-    const slotPoints = distributePoints(comprehensiveTotal, module.comprehensiveCount);
+    const mathModule = moduleForMathQuestionNumber(number);
+    if (!mathModule) return 10;
+    const choicePoints = mathModule.choiceCount * SUBJECT_PLAN_MATH.choicePoints;
+    const comprehensiveTotal = Math.max(0, mathModule.points - choicePoints);
+    const slotIndex = mathModule.comprehensiveNumbers.indexOf(Number(number));
+    const slotPoints = distributePoints(comprehensiveTotal, mathModule.comprehensiveCount);
     return Math.max(1, slotPoints[slotIndex] || slotPoints[0] || 10);
   }
   return questionType === "choice" ? SUBJECT_PLAN_MATH.choicePoints : 10;
@@ -287,7 +287,7 @@ function parseMarkdownFile(filePath, dataRoot) {
       return;
     }
     const questionType = inferQuestionType(source, current.number, current.section, rawText);
-    const module = inferModule(source, current.number, rawText);
+    const mathModule = inferModule(source, current.number, rawText);
     const { stem, choices } = extractChoices(rawText);
     const knowledge = inferKnowledge(current.context, source, questionType);
     const id = stableId([relativePath, current.number, stem.slice(0, 80)]);
@@ -300,8 +300,8 @@ function parseMarkdownFile(filePath, dataRoot) {
       subject: source.subject,
       examYear: getYearFromFile(filePath),
       number: current.number,
-      moduleId: module ? module.id : "unknown",
-      moduleName: module ? module.name : "未分类",
+      moduleId: mathModule ? mathModule.id : "unknown",
+      moduleName: mathModule ? mathModule.name : "未分类",
       questionType,
       questionTypeLabel: QUESTION_TYPE_LABELS[questionType] || "题目",
       knowledge,

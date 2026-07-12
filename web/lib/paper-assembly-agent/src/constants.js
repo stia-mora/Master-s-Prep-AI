@@ -72,19 +72,19 @@ function moduleById(id) {
 function moduleForMathQuestionNumber(number) {
   const normalized = Number(number);
   if (!Number.isFinite(normalized)) return null;
-  return SUBJECT_PLAN_MATH.modules.find((module) => {
-    const [start, end] = module.choiceRange;
+  return SUBJECT_PLAN_MATH.modules.find((mathModule) => {
+    const [start, end] = mathModule.choiceRange;
     return (
       (normalized >= start && normalized <= end) ||
-      module.comprehensiveNumbers.includes(normalized)
+      mathModule.comprehensiveNumbers.includes(normalized)
     );
   }) || null;
 }
 
 function modulePercent(moduleId) {
-  const module = moduleById(moduleId);
-  if (!module) return 0;
-  return Math.round((module.points / SUBJECT_PLAN_MATH.totalPoints) * 1000) / 10;
+  const mathModule = moduleById(moduleId);
+  if (!mathModule) return 0;
+  return Math.round((mathModule.points / SUBJECT_PLAN_MATH.totalPoints) * 1000) / 10;
 }
 
 module.exports = {
