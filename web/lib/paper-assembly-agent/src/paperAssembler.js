@@ -50,22 +50,22 @@ function distributePoints(total, count) {
   return Array.from({ length: count }, (_, index) => base + (index < remainder ? 1 : 0));
 }
 
-function applyMathSlotPoints(module, choices, comprehensive) {
+function applyMathSlotPoints(mathModule, choices, comprehensive) {
   const choiceQuestions = choices.map((question, index) => ({
     ...question,
     originalPoints: question.points,
     points: SUBJECT_PLAN_MATH.choicePoints,
-    paperSlot: `${module.shortName || module.name} 选择 ${index + 1}`,
+    paperSlot: `${mathModule.shortName || mathModule.name} 选择 ${index + 1}`,
     paperPointsSource: "math_template"
   }));
-  const choiceTotal = module.choiceCount * SUBJECT_PLAN_MATH.choicePoints;
-  const comprehensiveTotal = Math.max(0, module.points - choiceTotal);
-  const comprehensivePoints = distributePoints(comprehensiveTotal, module.comprehensiveCount);
+  const choiceTotal = mathModule.choiceCount * SUBJECT_PLAN_MATH.choicePoints;
+  const comprehensiveTotal = Math.max(0, mathModule.points - choiceTotal);
+  const comprehensivePoints = distributePoints(comprehensiveTotal, mathModule.comprehensiveCount);
   const comprehensiveQuestions = comprehensive.map((question, index) => ({
     ...question,
     originalPoints: question.points,
     points: comprehensivePoints[index] || question.points || 10,
-    paperSlot: `${module.shortName || module.name} 解答 ${index + 1}`,
+    paperSlot: `${mathModule.shortName || mathModule.name} 解答 ${index + 1}`,
     paperPointsSource: "math_template"
   }));
   return [...choiceQuestions, ...comprehensiveQuestions];
@@ -73,11 +73,11 @@ function applyMathSlotPoints(module, choices, comprehensive) {
 
 function normalizedMathPointFor(question) {
   if (question.questionType === "choice") return SUBJECT_PLAN_MATH.choicePoints;
-  const module = SUBJECT_PLAN_MATH.modules.find((item) => item.id === question.moduleId);
-  if (!module) return Number(question.points || 10);
-  const choiceTotal = module.choiceCount * SUBJECT_PLAN_MATH.choicePoints;
-  const comprehensiveTotal = Math.max(0, module.points - choiceTotal);
-  return Math.max(1, Math.round(comprehensiveTotal / Math.max(1, module.comprehensiveCount)));
+  const mathModule = SUBJECT_PLAN_MATH.modules.find((item) => item.id === question.moduleId);
+  if (!mathModule) return Number(question.points || 10);
+  const choiceTotal = mathModule.choiceCount * SUBJECT_PLAN_MATH.choicePoints;
+  const comprehensiveTotal = Math.max(0, mathModule.points - choiceTotal);
+  return Math.max(1, Math.round(comprehensiveTotal / Math.max(1, mathModule.comprehensiveCount)));
 }
 
 function originalQuestionKey(question) {
@@ -125,21 +125,21 @@ class PaperAssembler {
     const pool = this.questionBank.questions.filter((question) => sourceMatches(question, sourceScope));
     const selected = [];
 
-    for (const module of SUBJECT_PLAN_MATH.modules) {
-      const modulePool = pool.filter((question) => question.moduleId === module.id);
+    for (const mathModule of SUBJECT_PLAN_MATH.modules) {
+      const modulePool = pool.filter((question) => question.moduleId === mathModule.id);
       const choices = takeRandom(
         modulePool.filter((question) => question.questionType === "choice"),
-        module.choiceCount,
+        mathModule.choiceCount,
         warnings,
-        `${module.name}选择题`
+        `${mathModule.name}选择题`
       );
       const comprehensive = takeRandom(
         modulePool.filter((question) => question.questionType === "comprehensive"),
-        module.comprehensiveCount,
+        mathModule.comprehensiveCount,
         warnings,
-        `${module.name}解答题`
+        `${mathModule.name}解答题`
       );
-      selected.push(...applyMathSlotPoints(module, choices, comprehensive));
+      selected.push(...applyMathSlotPoints(mathModule, choices, comprehensive));
     }
 
     return this.buildPaper({
@@ -151,13 +151,13 @@ class PaperAssembler {
       target: {
         choiceTotal: SUBJECT_PLAN_MATH.choiceTotal,
         comprehensiveTotal: SUBJECT_PLAN_MATH.comprehensiveTotal,
-        modulePlan: SUBJECT_PLAN_MATH.modules.map((module) => ({
-          moduleId: module.id,
-          moduleName: module.name,
-          percent: modulePercent(module.id),
-          points: module.points,
-          choiceCount: module.choiceCount,
-          comprehensiveCount: module.comprehensiveCount
+        modulePlan: SUBJECT_PLAN_MATH.modules.map((mathModule) => ({
+          moduleId: mathModule.id,
+          moduleName: mathModule.name,
+          percent: modulePercent(mathModule.id),
+          points: mathModule.points,
+          choiceCount: mathModule.choiceCount,
+          comprehensiveCount: mathModule.comprehensiveCount
         }))
       }
     });
@@ -185,9 +185,9 @@ class PaperAssembler {
     if (mode === "random_by_minutes") {
       const minutes = clampNumber(payload.minutes, 45, 5, SUBJECT_PLAN_MATH.totalMinutes);
       const targetPoints = Math.max(5, Math.round((minutes / SUBJECT_PLAN_MATH.totalMinutes) * SUBJECT_PLAN_MATH.totalPoints));
-      for (const module of SUBJECT_PLAN_MATH.modules) {
-        const moduleTarget = Math.max(5, Math.round(targetPoints * (module.points / SUBJECT_PLAN_MATH.totalPoints)));
-        const modulePool = shuffle(wrongQuestions.filter((question) => question.moduleId === module.id));
+      for (const mathModule of SUBJECT_PLAN_MATH.modules) {
+        const moduleTarget = Math.max(5, Math.round(targetPoints * (mathModule.points / SUBJECT_PLAN_MATH.totalPoints)));
+        const modulePool = shuffle(wrongQuestions.filter((question) => question.moduleId === mathModule.id));
         let points = 0;
         for (const question of modulePool) {
           if (points >= moduleTarget) break;
@@ -201,7 +201,7 @@ class PaperAssembler {
           points += normalizedPoints;
         }
         if (points < moduleTarget) {
-          warnings.push(`${module.name}错题目标约 ${moduleTarget} 分，当前只能组到 ${points} 分。`);
+          warnings.push(`${mathModule.name}错题目标约 ${moduleTarget} 分，当前只能组到 ${points} 分。`);
         }
       }
       return this.buildPaper({
@@ -218,21 +218,21 @@ class PaperAssembler {
       });
     }
 
-    for (const module of SUBJECT_PLAN_MATH.modules) {
-      const modulePool = wrongQuestions.filter((question) => question.moduleId === module.id);
+    for (const mathModule of SUBJECT_PLAN_MATH.modules) {
+      const modulePool = wrongQuestions.filter((question) => question.moduleId === mathModule.id);
       const choices = takeRandom(
         modulePool.filter((question) => question.questionType === "choice"),
-        module.choiceCount,
+        mathModule.choiceCount,
         warnings,
-        `${module.name}错题选择题`
+        `${mathModule.name}错题选择题`
       );
       const comprehensive = takeRandom(
         modulePool.filter((question) => question.questionType === "comprehensive"),
-        module.comprehensiveCount,
+        mathModule.comprehensiveCount,
         warnings,
-        `${module.name}错题解答题`
+        `${mathModule.name}错题解答题`
       );
-      selected.push(...applyMathSlotPoints(module, choices, comprehensive));
+      selected.push(...applyMathSlotPoints(mathModule, choices, comprehensive));
     }
 
     return this.buildPaper({
@@ -373,11 +373,11 @@ class PaperAssembler {
       if (questionType === "comprehensive") return SUBJECT_PLAN_MATH.comprehensiveTotal;
       return SUBJECT_PLAN_MATH.choiceTotal + SUBJECT_PLAN_MATH.comprehensiveTotal;
     }
-    const module = SUBJECT_PLAN_MATH.modules.find((item) => item.id === moduleId);
-    if (!module) return 8;
-    if (questionType === "choice") return module.choiceCount;
-    if (questionType === "comprehensive") return module.comprehensiveCount;
-    return module.choiceCount + module.comprehensiveCount;
+    const mathModule = SUBJECT_PLAN_MATH.modules.find((item) => item.id === moduleId);
+    if (!mathModule) return 8;
+    if (questionType === "choice") return mathModule.choiceCount;
+    if (questionType === "comprehensive") return mathModule.comprehensiveCount;
+    return mathModule.choiceCount + mathModule.comprehensiveCount;
   }
 
   buildPaper({ mode, title, description, questions, warnings, target }) {
@@ -402,11 +402,11 @@ class PaperAssembler {
 
   questionTypeTree() {
     const grouped = groupBy(this.questionBank.questions, (question) => question.moduleId);
-    return SUBJECT_PLAN_MATH.modules.map((module) => {
-      const questions = grouped[module.id] || [];
+    return SUBJECT_PLAN_MATH.modules.map((mathModule) => {
+      const questions = grouped[mathModule.id] || [];
       return {
-        ...module,
-        percent: modulePercent(module.id),
+        ...mathModule,
+        percent: modulePercent(mathModule.id),
         counts: summarizeQuestions(questions),
         questionTypes: Object.entries(groupBy(questions, (question) => question.questionType)).map(([type, items]) => ({
           type,

@@ -475,7 +475,7 @@ class TestPatchBotStoppedAndRunning:
 class TestBotChatWebSocketStartup:
     """WebSocket endpoint should auto-start stopped configured bots."""
 
-    def test_ws_autostarts_stopped_bot(self, monkeypatch):
+    def test_ws_autostarts_stopped_bot(self, monkeypatch, allow_websocket_auth):
         from master_prep_ai.services.tutorbot.manager import BotConfig
 
         class FakeInstance:
@@ -511,7 +511,7 @@ class TestBotChatWebSocketStartup:
 
         assert mgr.started == ["ielts-tutor"]
 
-    def test_ws_unknown_bot_returns_error_payload(self, monkeypatch):
+    def test_ws_unknown_bot_returns_error_payload(self, monkeypatch, allow_websocket_auth):
         class FakeMgr:
             def get_bot(self, bot_id: str):
                 return None
@@ -531,7 +531,7 @@ class TestBotChatWebSocketStartup:
             assert payload["type"] == "error"
             assert "not found" in payload["content"].lower()
 
-    def test_ws_reuses_running_bot_on_reconnect(self, monkeypatch):
+    def test_ws_reuses_running_bot_on_reconnect(self, monkeypatch, allow_websocket_auth):
         """A second WS connect must not re-trigger start_bot if bot is running."""
         from master_prep_ai.services.tutorbot.manager import BotConfig
 
@@ -608,7 +608,7 @@ class TestStartLockDedup:
 class TestBotChatWebSocketResilience:
     """The WS handler must tolerate client disconnects during a turn."""
 
-    def test_ws_loop_breaks_on_client_disconnect_before_message(self, monkeypatch):
+    def test_ws_loop_breaks_on_client_disconnect_before_message(self, monkeypatch, allow_websocket_auth):
         from master_prep_ai.services.tutorbot.manager import BotConfig
 
         class FakeInstance:

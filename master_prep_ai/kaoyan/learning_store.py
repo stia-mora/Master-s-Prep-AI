@@ -1313,7 +1313,7 @@ class KaoyanLearningStore:
     ) -> None:
         last_result = "correct" if item.get("is_correct") else "wrong"
         conn.execute(
-            f"""
+            """
             UPDATE wrong_question
             SET retry_count = retry_count + ?,
                 last_retry_at = ?,

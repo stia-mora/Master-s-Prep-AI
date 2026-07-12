@@ -188,6 +188,7 @@ master-prep-ai config show
 ```bash
 master-prep-ai provider login openai-codex      # 执行 OpenAI Codex OAuth 登录
 master-prep-ai provider login github-copilot    # 校验现有 GitHub Copilot 认证是否可用
+master_prep_ai provider login github-copilot    # 校验现有 GitHub Copilot 认证是否可用
 ```
 
 ---

@@ -116,3 +116,22 @@ def fake_llm_config() -> MagicMock:
     cfg.api_key = "sk-test"
     cfg.api_base = "https://api.openai.com/v1"
     return cfg
+
+
+@pytest.fixture
+def allow_websocket_auth(monkeypatch: pytest.MonkeyPatch):
+    """Authenticate websocket unit tests without requiring a persisted cookie."""
+    from master_prep_ai import auth
+
+    async def _allow_test_user(ws):
+        await ws.accept()
+        auth._current_user_id.set("test-user")
+        return auth.AuthUser(
+            user_id="test-user",
+            email="test@example.com",
+            display_name="Test User",
+            role="user",
+        )
+
+    monkeypatch.setattr(auth, "require_websocket_user", _allow_test_user)
+    return _allow_test_user
