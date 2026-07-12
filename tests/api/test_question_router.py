@@ -119,7 +119,7 @@ def _build_app(router_module) -> FastAPI:
 
 
 def test_mimic_websocket_accepts_config_and_returns_messages(
-    monkeypatch: pytest.MonkeyPatch, tmp_path: Path
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path, allow_websocket_auth
 ) -> None:
     question_router_module = _load_question_router_module(monkeypatch)
 

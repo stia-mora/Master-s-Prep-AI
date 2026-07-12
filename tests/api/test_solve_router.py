@@ -33,7 +33,7 @@ def _build_app() -> FastAPI:
     return app
 
 
-def test_solve_router_uses_explicit_default_tools(monkeypatch, tmp_path) -> None:
+def test_solve_router_uses_explicit_default_tools(monkeypatch, tmp_path, allow_websocket_auth) -> None:
     captured: dict[str, object] = {}
 
     class FakeMainSolver:
@@ -73,7 +73,7 @@ def test_solve_router_uses_explicit_default_tools(monkeypatch, tmp_path) -> None
     assert captured["init"]["disable_planner_retrieve"] is False
 
 
-def test_solve_router_respects_disabled_tools(monkeypatch, tmp_path) -> None:
+def test_solve_router_respects_disabled_tools(monkeypatch, tmp_path, allow_websocket_auth) -> None:
     captured: dict[str, object] = {}
 
     class FakeMainSolver:
