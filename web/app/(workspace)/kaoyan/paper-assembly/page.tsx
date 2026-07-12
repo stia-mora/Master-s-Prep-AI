@@ -11,7 +11,7 @@ export default function PaperAssemblyPage() {
           >
             返回考研助手
           </Link>
-          <div className="truncate text-sm font-medium">408 题型组卷工作台</div>
+          <div className="truncate text-sm font-medium">做题库</div>
         </div>
         <a
           href="/paper-assembly-agent/index.html"
@@ -24,7 +24,7 @@ export default function PaperAssemblyPage() {
       </div>
       <iframe
         src="/paper-assembly-agent/index.html"
-        title="408 题型组卷工作台"
+        title="做题库"
         className="min-h-0 flex-1 border-0 bg-white"
       />
     </main>

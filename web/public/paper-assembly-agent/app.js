@@ -25,7 +25,7 @@ const state = {
 
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
-const API_BASE = "/api/paper-assembly";
+const API_BASE = window.location.protocol === "file:" ? "http://127.0.0.1:4173" : "/api/paper-assembly";
 
 const SUBJECT_TYPE_CONFIG = {
   mathKaoyan: {
@@ -51,7 +51,8 @@ async function api(path, options = {}) {
 }
 
 function apiPath(path) {
-  return path.startsWith("/api/") ? `${API_BASE}${path.slice(4)}` : path;
+  if (!path.startsWith("/api/")) return path;
+  return API_BASE.startsWith("http") ? `${API_BASE}${path}` : `${API_BASE}${path.slice(4)}`;
 }
 
 function toast(message) {
