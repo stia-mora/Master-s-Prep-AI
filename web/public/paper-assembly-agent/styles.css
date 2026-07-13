@@ -1,16 +1,21 @@
 :root {
-  --bg: #f6f7f9;
+  --bg: #faf9f6;
   --panel: #ffffff;
-  --panel-soft: #f0f5f3;
-  --text: #18201d;
-  --muted: #65716b;
-  --line: #dfe6e2;
-  --accent: #176b5c;
-  --accent-strong: #0e4f42;
-  --accent-soft: #dcefe9;
+  --panel-soft: #ece7dd;
+  --surface-subtle: #f7f3ec;
+  --surface-tint: #f4ebe2;
+  --text: #1f1d1b;
+  --muted: #6b655f;
+  --line: #dbd4c8;
+  --accent: #b0501e;
+  --accent-strong: #7a3514;
+  --accent-soft: #f3e3d7;
+  --accent-hover: #934219;
+  --field-label: #3c3833;
+  --focus: rgba(176, 80, 30, 0.24);
   --warn: #9c5b12;
   --danger: #a83f3f;
-  --shadow: 0 14px 40px rgba(34, 45, 40, 0.08);
+  --shadow: 0 14px 40px rgba(31, 29, 27, 0.08);
 }
 
 * {
@@ -36,12 +41,20 @@ button {
   cursor: pointer;
 }
 
+button:focus-visible,
+input:focus-visible,
+select:focus-visible,
+textarea:focus-visible {
+  outline: 3px solid var(--focus);
+  outline-offset: 2px;
+}
+
 .sidebar {
   position: fixed;
   inset: 0 auto 0 0;
   width: 276px;
   padding: 22px;
-  background: #17231f;
+  background: #2d211a;
   color: #f8fbfa;
   display: flex;
   flex-direction: column;
@@ -60,7 +73,7 @@ button {
   display: grid;
   place-items: center;
   border: 1px solid rgba(255, 255, 255, 0.2);
-  background: #26443b;
+  background: #7a3514;
   border-radius: 8px;
   font-weight: 700;
 }
@@ -84,7 +97,7 @@ button {
 
 .brand p {
   margin-top: 4px;
-  color: #b9c7c1;
+  color: #d8c8ba;
   font-size: 13px;
 }
 
@@ -100,7 +113,7 @@ button {
   padding: 12px 14px;
   color: var(--accent-strong);
   text-align: center;
-  background: var(--panel-soft);
+  background: var(--surface-tint);
 }
 
 .nav-button.is-active,
@@ -114,7 +127,7 @@ button {
   padding: 12px;
   border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 8px;
-  color: #cbd8d3;
+  color: #e3d6cc;
   font-size: 13px;
   line-height: 1.6;
 }
@@ -313,7 +326,7 @@ button {
 
 .entry-card:hover {
   border-color: var(--accent);
-  background: var(--panel-soft);
+  background: var(--surface-tint);
 }
 
 .entry-card strong,
@@ -414,7 +427,7 @@ button {
 .subject-card:hover,
 .subject-card.is-selected {
   border-color: var(--accent);
-  background: var(--accent-soft);
+  background: var(--surface-tint);
 }
 
 .subject-input {
@@ -553,7 +566,7 @@ button {
   border: 1px dashed var(--line);
   border-radius: 8px;
   color: var(--muted);
-  background: #fff;
+  background: var(--panel);
 }
 
 .assembly-options[hidden] {
@@ -572,7 +585,7 @@ button {
   padding: 4px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--panel);
 }
 
 .panel-grid {
@@ -679,7 +692,7 @@ button {
   border: 1px solid var(--line);
   border-radius: 8px;
   color: var(--muted);
-  background: #fbfcfc;
+  background: var(--surface-subtle);
   line-height: 1.55;
 }
 
@@ -712,7 +725,7 @@ fieldset {
   display: grid;
   gap: 7px;
   margin: 0 0 14px;
-  color: #34413c;
+  color: var(--field-label);
   font-size: 14px;
 }
 
@@ -729,7 +742,7 @@ textarea {
   border-radius: 8px;
   padding: 10px 11px;
   color: var(--text);
-  background: #fff;
+  background: var(--panel);
 }
 
 textarea {
@@ -752,7 +765,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px;
-  background: #fbfcfc;
+  background: var(--surface-subtle);
 }
 
 .segmented input {
@@ -775,7 +788,7 @@ textarea {
 }
 
 .primary-button:hover {
-  background: var(--accent-strong);
+  background: var(--accent-hover);
 }
 
 .secondary-button,
@@ -852,7 +865,7 @@ textarea {
   padding: 11px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfc;
+  background: var(--surface-subtle);
 }
 
 .summary-item strong {
@@ -998,7 +1011,7 @@ textarea {
   padding: 10px 12px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfc;
+  background: var(--surface-subtle);
 }
 
 .question-actions {
@@ -1030,7 +1043,7 @@ textarea {
   padding: 36px;
   border: 1px dashed var(--line);
   border-radius: 8px;
-  background: #fff;
+  background: var(--panel);
   text-align: center;
 }
 
@@ -1070,7 +1083,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--accent-strong);
-  background: #fbfcfc;
+  background: var(--surface-subtle);
 }
 
 .filter-chip.is-active,
@@ -1135,7 +1148,7 @@ textarea {
   border-left: 3px solid var(--accent);
   border-radius: 6px;
   color: var(--text);
-  background: #fbfcfc;
+  background: var(--surface-subtle);
   line-height: 1.6;
 }
 
@@ -1159,7 +1172,7 @@ textarea {
   border-radius: 8px;
   background: var(--panel);
   box-shadow: var(--shadow);
-  color: #34413c;
+  color: var(--field-label);
   font-size: 14px;
 }
 
@@ -1204,7 +1217,7 @@ textarea {
 
 .original-card button:disabled {
   cursor: not-allowed;
-  background: #b8c7c1;
+  background: #beb6aa;
 }
 
 .original-card-actions {
@@ -1234,7 +1247,7 @@ textarea {
   padding: 8px 10px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfc;
+  background: var(--surface-subtle);
 }
 
 .upload-edit-form {
@@ -1248,7 +1261,7 @@ textarea {
 .upload-edit-form label {
   display: grid;
   gap: 6px;
-  color: #34413c;
+  color: var(--field-label);
   font-size: 13px;
 }
 
@@ -1258,7 +1271,7 @@ textarea {
   border: 1px solid var(--line);
   border-radius: 8px;
   padding: 10px 12px;
-  background: #fbfcfc;
+  background: var(--surface-subtle);
   resize: vertical;
 }
 
@@ -1291,7 +1304,7 @@ textarea {
   padding: 8px 10px;
   border-left: 3px solid var(--accent);
   border-radius: 6px;
-  background: #fbfcfc;
+  background: var(--surface-subtle);
 }
 
 .wrong-row input[type="checkbox"] {
@@ -1304,8 +1317,8 @@ textarea {
   overflow: auto;
   padding: 14px;
   border-radius: 8px;
-  background: #101915;
-  color: #d9eee8;
+  background: #241a14;
+  color: #f4e7dc;
   white-space: pre-wrap;
 }
 
@@ -1319,7 +1332,7 @@ textarea {
   padding: 14px;
   border: 1px solid var(--line);
   border-radius: 8px;
-  background: #fbfcfc;
+  background: var(--surface-subtle);
 }
 
 .type-node h4 {
@@ -1334,7 +1347,7 @@ textarea {
   padding: 12px 14px;
   border-radius: 8px;
   color: #fff;
-  background: rgba(23, 35, 31, 0.96);
+  background: rgba(31, 29, 27, 0.96);
   opacity: 0;
   transform: translateY(12px);
   transition: opacity 160ms ease, transform 160ms ease;
